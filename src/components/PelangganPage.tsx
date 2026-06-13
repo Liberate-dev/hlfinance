@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Search, 
@@ -15,6 +15,9 @@ import {
   Eye,
   Check
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+
+const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 
 // Tipe data untuk Customer sesuai PRD
 interface Customer {
@@ -87,7 +90,9 @@ export default function PelangganPage() {
     addCustomer, 
     updateCustomer, 
     settleTransaction, 
-    settleBulkTransactions 
+    settleBulkTransactions,
+    showAddCustomer,
+    setShowAddCustomer
   } = useStore();
   
   const bons = transactions;
@@ -116,6 +121,14 @@ export default function PelangganPage() {
   const [addCustomerForm, setAddCustomerForm] = useState<any | null>(null);
   const [newLmDiscountAdd, setNewLmDiscountAdd] = useState<string>('');
   const [newBrDiscountAdd, setNewBrDiscountAdd] = useState<string>('');
+
+  // Sync direct open add from dashboard
+  useEffect(() => {
+    if (showAddCustomer) {
+      setIsAddingCustomer(true);
+      setShowAddCustomer(false);
+    }
+  }, [showAddCustomer, setShowAddCustomer]);
 
   // State Filter Bulan & Tahun (Maksimal s/d Bulan & Tahun Saat Ini)
   const today = new Date();
@@ -168,19 +181,17 @@ export default function PelangganPage() {
   const itemsPerPage = 20;
 
   // Filter bon milik customer aktif (untuk Toko Jaya Abadi cust-1)
-  const currentCustomerBons = activeCustomer ? bons : [];
-  const totalBonsCount = currentCustomerBons.length;
-  const totalPages = Math.ceil(totalBonsCount / itemsPerPage);
-  
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedBons = currentCustomerBons.slice(startIndex, startIndex + itemsPerPage);
-
-  // Summary Keuangan untuk Bulan Terpilih - Dinamik berdasarkan filter
+  // PRD AC-6.1: pilih bulan -> tampilkan daftar untuk bulan tersebut (dikelompokkan per bulan)
   const yearPrefix = selectedYear.toString();
   const monthPrefix = selectedMonth.toString().padStart(2, '0');
   const selectedYearMonth = `${yearPrefix}-${monthPrefix}`;
 
-  const currentMonthBons = currentCustomerBons.filter(b => b.tanggal.startsWith(selectedYearMonth));
+  const currentMonthBons = activeCustomer ? bons.filter(b => b.tanggal.startsWith(selectedYearMonth)) : [];
+  const totalBonsCount = currentMonthBons.length;
+  const totalPages = Math.ceil(totalBonsCount / itemsPerPage);
+  
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedBons = currentMonthBons.slice(startIndex, startIndex + itemsPerPage);
   const totalPiutang = currentMonthBons.filter(b => b.status === 'Open').reduce((acc, curr) => acc + (curr.omzet + curr.ongkir), 0);
   const totalTerbayar = currentMonthBons.filter(b => b.status === 'Lunas').reduce((acc, curr) => acc + (curr.omzet + curr.ongkir), 0);
   
@@ -193,32 +204,34 @@ export default function PelangganPage() {
   }, 0);
   const totalOmzet = totalOmzetLM + totalOmzetBR;
 
-  // Laba diasumsikan modalnya 60% dari base price untuk visualisasi (harga modal dirahasiakan di PRD)
+  // Laba pakai snapshot exact per PRD §5 (bukan estimasi). Gunakan harga_modal_snapshot (0 jika bonus).
   const totalLaba = currentMonthLunasBons.reduce((acc, curr) => {
     const itemLaba = curr.lines.reduce((subAcc, line) => {
-      const modalEstimasi = line.harga_base * 0.6; 
-      return subAcc + ((line.harga_final - modalEstimasi) * line.qty);
+      const modal = line.harga_modal_snapshot ?? 0;
+      return subAcc + ((line.harga_final - modal) * line.qty);
     }, 0);
     return acc + itemLaba;
   }, 0);
 
   // 6. TINDAKAN PELUNASAN (Bulk & Single)
-  const handleSettleConfirmation = () => {
+  const handleSettleConfirmation = async () => {
     if (settleMode === 'single' && targetBonId) {
-      settleTransaction(targetBonId, settleDate);
+      const err = await settleTransaction(targetBonId, settleDate);
+      if (err) { alert(err); return; }
       if (activeBonDetail && activeBonDetail.id === targetBonId) {
         setActiveBonDetail((prev: any) => prev ? { ...prev, status: 'Lunas', tanggal_lunas: settleDate } : null);
       }
       alert(`Bon berhasil dilunasi pada tanggal ${settleDate}!`);
     } else if (settleMode === 'bulk' && selectedCustomerId) {
-      settleBulkTransactions(selectedCustomerId, selectedYearMonth, settleDate);
+      const err = await settleBulkTransactions(selectedCustomerId, selectedYearMonth, settleDate);
+      if (err) { alert(err); return; }
       alert(`Semua tagihan Open bulan ini berhasil dilunasi pada tanggal ${settleDate}!`);
     }
     setShowSettleModal(false);
   };
 
   // 6.2 TINDAKAN EDIT PELANGGAN
-  const handleSaveEditCustomer = () => {
+  const handleSaveEditCustomer = async () => {
     if (!editCustomerForm) return;
     if (!editCustomerForm.nama.trim()) {
       alert("Nama pelanggan tidak boleh kosong!");
@@ -236,12 +249,13 @@ export default function PelangganPage() {
       return;
     }
 
-    updateCustomer(editCustomerForm);
+    const err = await updateCustomer(editCustomerForm);
+    if (err) { alert(err); return; }
     setIsEditingCustomer(false);
   };
 
   // 6.3 TINDAKAN TAMBAH PELANGGAN
-  const handleSaveAddCustomer = () => {
+  const handleSaveAddCustomer = async () => {
     if (!addCustomerForm) return;
     if (!addCustomerForm.nama.trim()) {
       alert("Nama pelanggan tidak boleh kosong!");
@@ -259,19 +273,85 @@ export default function PelangganPage() {
       return;
     }
 
-    const newCust: any = {
-      ...addCustomerForm,
-      id: `cust-${Date.now()}`,
+    const err = await addCustomer({
       kode: addCustomerForm.kode.trim(),
       nama: addCustomerForm.nama.trim(),
-      accumulated_omzet: 0,
-      bonus_claimed: 0,
-      deleted_at: null
-    };
-
-    addCustomer(newCust);
+      diskon_lm: addCustomerForm.diskon_lm,
+      diskon_br: addCustomerForm.diskon_br,
+      threshold_bonus: addCustomerForm.threshold_bonus,
+      telepon: addCustomerForm.telepon,
+      alamat: addCustomerForm.alamat,
+      deleted_at: null,
+    });
+    if (err) { alert(err); return; }
     setIsAddingCustomer(false);
-    alert(`Pelanggan baru "${newCust.nama}" berhasil ditambahkan!`);
+    alert(`Pelanggan baru "${addCustomerForm.nama.trim()}" berhasil ditambahkan!`);
+  };
+
+  // Real PDF export for customer detail (piutang/transaksi per bulan) with proper layout
+  const handleExportCustomerPDF = () => {
+    if (!activeCustomer) return;
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 15;
+
+    doc.setFontSize(16);
+    doc.setTextColor(0, 43, 143);
+    doc.text('HL FINANCE', 20, y);
+    doc.setFontSize(9);
+    doc.setTextColor(80);
+    doc.text('Laporan Transaksi Pelanggan', 20, y + 6);
+    y += 12;
+    doc.setDrawColor(0, 43, 143);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 8;
+
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text(`Pelanggan: ${activeCustomer.nama} (${activeCustomer.kode})`, 20, y);
+    y += 6;
+    doc.text(`Periode: ${selectedYear}-${String(selectedMonth).padStart(2, '0')}`, 20, y);
+    y += 6;
+    doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, pageWidth - 20, y, { align: 'right' });
+    y += 10;
+
+    // Summary
+    doc.setFontSize(9);
+    doc.text(`Total Piutang: ${formatRp(totalPiutang)}   |   Terbayar: ${formatRp(totalTerbayar)}   |   Omzet: ${formatRp(totalOmzet)}   |   Laba est: ${formatRp(totalLaba)}`, 20, y);
+    y += 8;
+
+    // Table header
+    doc.setFontSize(8);
+    doc.text('Tgl', 20, y);
+    doc.text('No Bon', 45, y);
+    doc.text('Omzet', 90, y);
+    doc.text('Ongkir', 115, y);
+    doc.text('Tagihan', 140, y);
+    doc.text('Status', 170, y);
+    y += 4;
+    doc.line(20, y, pageWidth - 20, y);
+    y += 5;
+
+    const list = currentMonthBons.slice(0, 25); // limit
+    list.forEach(b => {
+      const tagihan = b.omzet + b.ongkir;
+      doc.text(b.tanggal.substring(5), 20, y);
+      doc.text(b.nomor_bon.substring(0, 18), 45, y);
+      doc.text(formatRp(b.omzet).replace('Rp ', ''), 90, y);
+      doc.text(formatRp(b.ongkir).replace('Rp ', ''), 115, y);
+      doc.text(formatRp(tagihan).replace('Rp ', ''), 140, y);
+      doc.text(b.status === 'Lunas' ? 'LUNAS' : b.status === 'Open' ? 'PIUTANG' : 'BATAL', 170, y);
+      y += 5;
+      if (y > 260) { doc.addPage(); y = 20; }
+    });
+
+    y += 5;
+    doc.line(20, y, pageWidth - 20, y);
+    y += 8;
+    doc.setFontSize(8);
+    doc.text('Dokumen resmi HL Finance - otomatis', 20, y);
+
+    doc.save(`Laporan-Pelanggan-${activeCustomer.kode}-${selectedYear}${String(selectedMonth).padStart(2,'0')}.pdf`);
   };
 
   return (
@@ -1116,7 +1196,7 @@ export default function PelangganPage() {
               </button>
               
               <button
-                onClick={() => alert('Mengunduh Laporan Transaksi Pelanggan sebagai PDF...')}
+                onClick={handleExportCustomerPDF}
                 className="flex items-center space-x-2.5 px-6 py-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-extrabold rounded-xl transition-all cursor-pointer text-base"
                 style={{ minHeight: '48px' }}
               >

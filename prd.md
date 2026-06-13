@@ -1,7 +1,7 @@
 # PRD — Aplikasi Manajemen Penjualan & Piutang HL
 
-**Versi:** 2.1  
-**Tanggal:** 08 Juni 2026  
+**Versi:** 2.2  
+**Tanggal:** 13 Juni 2026  
 **Status:** Final Draft  
 **Basis Akuntansi:** Cash Basis  
 **Mata Uang:** IDR (Rp) — tanpa PPN  
@@ -11,11 +11,25 @@
 | Layer | Teknologi |
 |---|---|
 | Frontend | React + Vite + TypeScript + Tailwind CSS + Shadcn UI |
-| State Management | Zustand |
-| Backend | ElysiaJS |
-| Database | PostgreSQL via Supabase |
-| Deploy Frontend | Vercel |
-| Deploy Backend | Railway / Fly.io |
+| State Management | Zustand (UI state) + Supabase session |
+| Backend / API | Supabase (PostgREST + Auth + RPC) |
+| Database | PostgreSQL (Supabase) |
+| Business Logic | PostgreSQL Functions (RPC) + Triggers |
+| Deploy | Vercel (frontend) + Supabase (managed) |
+
+**Arsitektur:**
+
+```
+Browser (React di Vercel)
+    ↓ @supabase/supabase-js
+Supabase Platform
+    ├── Auth          → login, session, token refresh
+    ├── PostgREST     → CRUD otomatis dari tabel
+    ├── RPC           → logic bisnis (buat bon, lunas, kalkulasi diskon)
+    └── PostgreSQL    → data, constraints, triggers, RLS
+```
+
+> **Keputusan arsitektur v2.2:** Tidak ada server custom (Elysia/PHP/Node) yang di-deploy terpisah. Supabase berperan sebagai Backend-as-a-Service. Logic bisnis yang sebelumnya direncanakan di server API dipindahkan ke PostgreSQL Functions (RPC) dan triggers.
 
 ---
 
@@ -44,6 +58,8 @@ Aplikasi web internal single-user untuk pemilik bisnis HL. Mengelola data pelang
 - Penghitungan bonus pelanggan yang manual dan rawan kesalahan
 
 **Target pengguna:** Pemilik bisnis (single administrator), operasi harian via tablet.
+
+**Deploy:** Frontend di Vercel, database + auth + API di Supabase — dua layanan managed, tanpa server backend terpisah.
 
 ---
 
@@ -93,8 +109,8 @@ Aplikasi web internal single-user untuk pemilik bisnis HL. Mengelola data pelang
 **AC-1.2** Hanya ada satu akun user. Tidak ada self-registration.  
 **AC-1.3** Login dengan kredensial valid mengarahkan user ke dashboard.  
 **AC-1.4** Login dengan kredensial salah ditolak dengan pesan error jelas.  
-**AC-1.5** Setelah 5 kali gagal login, akun terkunci selama 30 menit.  
-**AC-1.6** Sesi aktif sampai logout atau expired. Opsi logout tersedia.  
+**AC-1.5** Setelah 5 kali gagal login, akun terkunci selama 30 menit (via `user_security` + Edge Function `auth-login`).  
+**AC-1.6** Sesi aktif sampai logout atau expired (Supabase Auth session). Opsi logout tersedia.
 
 ---
 
@@ -151,7 +167,7 @@ Data Bon: Tanggal, Nomor Bon, Pelanggan, Item produk, Ongkir, Deskripsi, Status 
 **AC-4.10.1** Mengedit transaksi Open merecalculate omzet, laba, dan total — **dengan aturan berikut:**
 - Baris produk yang sudah ada **wajib mempertahankan `harga_base_snapshot` dan `harga_modal_snapshot` awal**, meskipun harga master produk sudah berubah sejak bon dibuat.
 - Harga snapshot hanya diperbarui jika user secara eksplisit **mengganti produk** di baris tersebut (pilih produk berbeda).
-- Backend wajib mengabaikan harga dari request body untuk baris existing dan menggunakan nilai snapshot yang tersimpan di database. Frontend menampilkan harga snapshot, bukan harga master terkini.
+- RPC `update_bon_open` wajib mengabaikan harga dari request body untuk baris existing dan menggunakan nilai snapshot yang tersimpan di database. Frontend menampilkan harga snapshot, bukan harga master terkini.
 - Perubahan qty pada baris existing hanya merecalculate `qty × harga_final_unit` — tidak menarik ulang harga dari `products`.
 **AC-4.11** Transaksi berstatus Lunas bersifat **read-only sepenuhnya**. Tidak ada edit, tidak ada delete.  
 **AC-4.12** Transaksi berstatus Cancelled disembunyikan dari laporan aktif (Piutang, Omzet, Laba) namun tetap tersimpan di histori.  
@@ -260,15 +276,29 @@ Ini adalah satu-satunya sumber kebenaran untuk semua kalkulasi. Implementasi tid
 
 ## 6. Skema Database
 
-### 6.1 Tabel `users`
+### 6.1 Autentikasi (Supabase Auth)
+
+Autentikasi menggunakan **Supabase Auth** (`auth.users` — schema managed oleh Supabase). Tidak ada tabel `users` custom.
+
+| Aspek | Implementasi |
+|---|---|
+| Akun | Satu akun dibuat manual via Supabase Dashboard (AC-1.2) |
+| Login | Email + password via `supabase.auth.signInWithPassword()` |
+| Session | Dikelola `@supabase/supabase-js` — auto refresh token |
+| Logout | `supabase.auth.signOut()` |
+| Lockout (AC-1.5) | Tabel `user_security` (lihat §6.1.1) + validasi di Edge Function `auth-login` |
+
+#### 6.1.1 Tabel `user_security`
+
+Tabel extension untuk lockout login. Satu baris per akun.
 
 | Kolom | Tipe | Constraint |
 |---|---|---|
-| `id` | UUID | Primary Key |
-| `username` | Varchar | Unique, Not Null |
-| `password_hash` | Varchar | Not Null |
+| `id` | UUID | Primary Key, FK → `auth.users.id` |
 | `failed_attempts` | Integer | Default 0, Not Null |
-| `locked_until` | Timestamp | Nullable |
+| `locked_until` | Timestamptz | Nullable |
+
+> Password disimpan dan di-hash oleh Supabase Auth (bukan di tabel aplikasi). Kebijakan password: minimum 8 karakter, kombinasi huruf besar, kecil, angka, dan karakter spesial.
 
 ---
 
@@ -398,6 +428,76 @@ FOR EACH ROW EXECUTE FUNCTION prevent_locked_update();
 
 ---
 
+### 6.7 PostgreSQL RPC Functions
+
+Logic bisnis yang kompleks **wajib** diimplementasikan sebagai PostgreSQL Functions yang dipanggil dari frontend via `supabase.rpc()`. Frontend tidak boleh menulis langsung ke tabel `transactions` / `transaction_lines` untuk operasi berikut.
+
+| Function | Tujuan | Dipanggil saat |
+|---|---|---|
+| `calculate_final_price(base, discounts)` | Kalkulasi diskon bertingkat (§5) | Internal (dipanggil function lain) |
+| `create_bon(...)` | Insert bon + lines + snapshot + validasi unik nomor | Simpan bon baru (Open atau Bonus) |
+| `update_bon_open(...)` | Update bon Open + recalc; pertahankan snapshot baris existing (AC-4.10.1) | Edit bon Open |
+| `cancel_bon(id)` | Ubah status Open → Cancelled | Batalkan bon |
+| `settle_bon(id, date)` | Pelunasan per bon — single UPDATE atomik (AC-6.6) | Klik "Lunas" |
+| `settle_bon_bulk(customer_id, year_month, date)` | Pelunasan bulk per bulan (AC-6.5) | "Sudah Lunas (Bulan Ini)" |
+
+**Aturan implementasi RPC:**
+- Semua function berjalan sebagai `SECURITY DEFINER` dengan validasi input ketat.
+- `create_bon` dan `update_bon_open` wajib menulis snapshot sesuai §5 (tidak boleh mengandalkan nilai dari frontend).
+- `settle_bon` dan `settle_bon_bulk` wajib mengisi `status`, `tanggal_lunas`, dan `locked_at` dalam satu statement.
+- Bonus bon (`is_bonus = true`) wajib langsung `status = 'Lunas'` dan `locked_at = now()` saat insert.
+
+**CRUD sederhana** (pelanggan, produk) boleh langsung via Supabase client:
+
+```typescript
+// Contoh — pelanggan
+await supabase.from('customers').select('*').is('deleted_at', null)
+
+// Contoh — bon (logic kompleks via RPC)
+await supabase.rpc('create_bon', { p_nomor_bon: '...', p_lines: [...] })
+```
+
+---
+
+### 6.8 Views & Row Level Security
+
+#### View `products_public`
+
+View yang mengekspos produk **tanpa** kolom `harga_modal`. Semua query produk dari frontend wajib melalui view ini, bukan tabel `products` langsung.
+
+```sql
+CREATE VIEW products_public AS
+SELECT id, kode, nama, tipe, harga_base, created_at, updated_at, deleted_at
+FROM products;
+```
+
+#### Row Level Security (RLS)
+
+RLS **wajib aktif** di semua tabel aplikasi (`customers`, `products`, `transactions`, `transaction_lines`, `user_security`).
+
+| Kebijakan | Aturan |
+|---|---|
+| Akses data | Hanya user terautentikasi (`auth.uid() IS NOT NULL`) |
+| Single-user | Satu akun admin — semua data dapat diakses setelah login |
+| `products` | Frontend hanya SELECT via `products_public`; INSERT/UPDATE/DELETE via tabel `products` dengan RLS |
+| `harga_modal` | Tidak pernah di-SELECT oleh role `authenticated` pada tabel `products` |
+
+> **Service Role Key** hanya digunakan di server-side (migration, admin script). **Tidak pernah** di-bundle ke frontend Vercel.
+
+---
+
+### 6.9 Supabase Edge Functions
+
+Edge Function digunakan hanya untuk logic yang tidak cocok di SQL murni.
+
+| Function | Tujuan |
+|---|---|
+| `auth-login` | Validasi lockout (`user_security.locked_until`) sebelum/sesudah `signInWithPassword`; increment `failed_attempts` saat gagal, reset saat sukses |
+
+Semua logic bisnis transaksi (bon, lunas, diskon) tetap di PostgreSQL RPC (§6.7), bukan Edge Function.
+
+---
+
 ## 7. Alur Pengguna (User Flows)
 
 ### 7.1 Membuat Bon Baru
@@ -464,29 +564,37 @@ FOR EACH ROW EXECUTE FUNCTION prevent_locked_update();
 
 ### 8.1 Keamanan
 
-**Autentikasi — JWT Cross-Domain:**
-- Token JWT disimpan di **Zustand memory** (bukan localStorage, bukan sessionStorage, bukan cookie) untuk mencegah XSS.
-- Setiap request API menyertakan token di header: `Authorization: Bearer <token>`
-- Access token short-lived: **15 menit**. Refresh token: **7 hari**.
-- Saat access token expired, frontend secara otomatis menggunakan refresh token untuk mendapatkan access token baru tanpa memaksa user login ulang.
-- Saat refresh token expired atau tidak valid, user diarahkan ke halaman login.
-- **Konsekuensi Zustand memory:** Token hilang saat tab/browser ditutup. User perlu login ulang saat membuka tab baru. Ini adalah trade-off yang diterima untuk keamanan.
+**Autentikasi — Supabase Auth:**
+- Session dikelola oleh `@supabase/supabase-js` (access token + refresh token).
+- Setiap request ke Supabase otomatis menyertakan JWT di header `Authorization`.
+- Token refresh ditangani otomatis oleh Supabase client — user tidak perlu login ulang selama session valid.
+- Saat session expired atau tidak valid, user diarahkan ke halaman login.
+- Zustand menyimpan **UI state** saja (bukan token JWT).
 
-**CORS (wajib dikonfigurasi di Elysia):**
-- Backend hanya menerima request dari origin frontend yang terdaftar (whitelist eksplisit — bukan wildcard `*`).
-- Header yang diizinkan: `Authorization`, `Content-Type`.
+**Supabase API Security:**
+- Frontend menggunakan **Anon Key** (public, aman untuk di-bundle) — akses data dibatasi oleh RLS.
+- **Service Role Key** tidak pernah ada di frontend; hanya untuk migration/admin.
+- CORS dikelola oleh Supabase — tidak perlu konfigurasi server custom.
+- Di Supabase Dashboard, aktifkan **restrict API to allowed origins** dengan whitelist domain Vercel production.
 
 **Keamanan umum:**
-- Password: minimum 8 karakter, kombinasi huruf besar, kecil, angka, dan karakter spesial. Disimpan dengan bcrypt + salt.
-- Lockout: 5 kali gagal login → akun terkunci 30 menit (kolom `failed_attempts` dan `locked_until` di tabel `users`).
-- HTTPS (TLS 1.2+) untuk semua komunikasi.
-- Input validation ketat di sisi server dan client (mencegah SQL injection, XSS).
-- Harga Modal tidak pernah dikirim ke frontend dalam response apapun.
+- Password: minimum 8 karakter, kombinasi huruf besar, kecil, angka, dan karakter spesial (kebijakan Supabase Auth).
+- Lockout: 5 kali gagal login → akun terkunci 30 menit (`user_security.failed_attempts` + `locked_until`, divalidasi Edge Function `auth-login`).
+- HTTPS (TLS 1.2+) untuk semua komunikasi (Vercel + Supabase default).
+- Input validation ketat di RPC functions dan client (mencegah SQL injection, XSS).
+- Harga Modal tidak pernah dikirim ke frontend — hanya via tabel `products` internal; frontend query `products_public` (§6.8).
+
+**Environment Variables (Vercel):**
+
+| Variable | Keterangan |
+|---|---|
+| `VITE_SUPABASE_URL` | URL project Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Anon/public key (aman untuk frontend, dilindungi RLS) |
 
 ### 8.2 Performa
 
 - Halaman kritis (Dashboard, Daftar Transaksi): load < 2 detik
-- API response untuk operasi kritis (login, simpan bon, pelunasan): < 200ms (p90)
+- Supabase RPC response untuk operasi kritis (login, simpan bon, pelunasan): < 200ms (p90)
 - Generasi laporan untuk dataset bulanan tipikal: < 5 detik
 
 ### 8.3 Lokalisasi
@@ -505,7 +613,7 @@ FOR EACH ROW EXECUTE FUNCTION prevent_locked_update();
 
 ### 8.5 Backup & Recovery
 
-- Backup database harian (full)
+- Backup database harian (full) — via Supabase automated backups (plan Pro) atau manual pg_dump
 - Recovery Time Objective (RTO): 4 jam
 - Recovery Point Objective (RPO): 24 jam
 
@@ -526,4 +634,5 @@ Fitur-fitur berikut **tidak** dibangun dalam versi ini:
 - Perhitungan pajak (PPN dan sejenisnya)
 - Multi-currency
 - Fitur budgeting dan forecasting
-- Configurable discount rules via UI (P2 — dikelola via backend/database oleh developer)
+- Configurable discount rules via UI (P2 — dikelola via database/RPC oleh developer)
+- Server API custom terpisah (Elysia, PHP, Express, dll.) — digantikan Supabase

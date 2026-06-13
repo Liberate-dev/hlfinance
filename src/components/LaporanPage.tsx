@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import type { Customer } from '../store/useStore';
+import jsPDF from 'jspdf';
 
 const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 
@@ -16,9 +17,9 @@ export default function LaporanPage() {
   // State untuk Detail Modal Pelanggan
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
 
-  // Pagination State untuk Tabel Utama
+  // Pagination State untuk Tabel Utama (20 per halaman per PRD AC-6.2 / perf tablet)
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 20;
 
   const monthsList = [
     { value: 1, label: 'Januari' },
@@ -244,329 +245,82 @@ export default function LaporanPage() {
     return monthTransactions.filter(t => t.customer_id === detailCustomer.id);
   }, [detailCustomer, monthTransactions]);
 
-  // --- FUNGSI MOCK PDF EXPORT ---
+  // --- REAL PDF EXPORT (jsPDF) per PRD AC-7.8 - proper layout ---
   
   const handleExportPDF = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 15;
 
     const reportTitle = activeReportTab === 'bonus' 
       ? 'LAPORAN DATA KLAIM BONUS PELANGGAN' 
       : `LAPORAN KEUANGAN HL FINANCE - ${activeReportTab === 'semua' ? 'KESELURUHAN' : activeReportTab.toUpperCase()}`;
     const periodStr = periodLabel;
 
-    const tableRows = customerPerformance.map((row, idx) => {
-      let statusClass = 'status-badge';
-      let statusLabel = '—';
-      if (row.statusTerakhir === 'LUNAS') {
-        statusClass += ' status-lunas';
-        statusLabel = 'LUNAS';
-      } else if (row.statusTerakhir === 'PIUTANG') {
-        statusClass += ' status-piutang';
-        statusLabel = 'PIUTANG';
-      } else if (row.statusTerakhir === 'BATAL') {
-        statusClass += ' status-batal';
-        statusLabel = 'BATAL';
-      }
+    // Header
+    doc.setFillColor(0, 43, 143);
+    doc.rect(15, y - 5, pageWidth - 30, 16, 'F');
+    doc.setTextColor(255);
+    doc.setFontSize(12);
+    doc.text('HL FINANCE', 20, y + 2);
+    doc.setFontSize(8);
+    doc.text('Rekapitulasi & Pelaporan Keuangan Bulanan', 20, y + 8);
+    doc.setTextColor(0);
+    doc.text(`Periode: ${periodStr.toUpperCase()}`, pageWidth - 20, y, { align: 'right' });
+    doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, pageWidth - 20, y + 5, { align: 'right' });
+    y += 18;
 
-      return `
-        <tr>
-          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
-          <td><strong>${row.customer.nama}</strong> <span style="font-weight: normal; color: #64748b;">(${row.customer.kode})</span></td>
-          <td style="text-align: center; font-weight: bold;">${row.totalTransaksi} Kali</td>
-          <td style="text-align: center; font-weight: bold;">
-            ${activeReportTab === 'bonus' ? `${row.omzet} Unit` : formatRp(row.omzet)}
-          </td>
-          <td style="text-align: center;">
-            <span class="${statusClass}">${statusLabel}</span>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    doc.setFontSize(10);
+    doc.text(reportTitle, 20, y);
+    y += 5;
 
-    printWindow.document.write(`
-      <html>
-      <head>
-        <title>Laporan HL - ${periodStr}</title>
-        <style>
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            box-sizing: border-box;
-          }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            padding: 30px;
-            color: #1e293b;
-            background-color: #ffffff;
-            line-height: 1.4;
-          }
-          .header {
-            text-align: center;
-            border-bottom: 4px double #0f172a;
-            padding-bottom: 12px;
-            margin-bottom: 20px;
-          }
-          .title {
-            font-size: 28px;
-            font-weight: 900;
-            color: #0f172a;
-            letter-spacing: 1px;
-            margin: 0;
-          }
-          .subtitle {
-            font-size: 14px;
-            color: #334155;
-            margin-top: 5px;
-            font-weight: bold;
-          }
-          .sub-subtitle {
-            font-size: 11px;
-            color: #64748b;
-            margin-top: 3px;
-            font-weight: bold;
-            font-family: monospace;
-            letter-spacing: 0.5px;
-          }
-          .meta-section {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            font-weight: bold;
-            color: #475569;
-            border-bottom: 1px dotted #cbd5e1;
-            padding-bottom: 12px;
-            margin-bottom: 25px;
-          }
-          .meta-left, .meta-right {
-            line-height: 1.8;
-          }
-          .meta-label {
-            color: #94a3b8;
-            display: inline-block;
-            width: 120px;
-            letter-spacing: 0.5px;
-          }
-          .meta-val {
-            color: #0f172a;
-          }
-          .report-title-section {
-            text-align: center;
-            font-size: 16px;
-            font-weight: 900;
-            margin-bottom: 20px;
-            color: #0f172a;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-          }
-          .kpi-container {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 25px;
-          }
-          .kpi-card {
-            border: 2px solid #cbd5e1;
-            padding: 15px;
-            border-radius: 16px;
-            background-color: #f8fafc;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 100px;
-          }
-          .kpi-card.kpi-blue {
-            background-color: #f0f9ff;
-            border-color: #bae6fd;
-            border-left: 6px solid #0284c7;
-          }
-          .kpi-card.kpi-green {
-            background-color: #f0fdf4;
-            border-color: #bbf7d0;
-            border-left: 6px solid #16a34a;
-          }
-          .kpi-card.kpi-indigo {
-            background-color: #f5f3ff;
-            border-color: #ddd6fe;
-            border-left: 6px solid #7c3aed;
-          }
-          .kpi-card.kpi-amber {
-            background-color: #fffbeb;
-            border-color: #fde68a;
-            border-left: 6px solid #d97706;
-          }
-          .kpi-card h4 {
-            margin: 0 0 8px 0;
-            font-size: 10px;
-            color: #64748b;
-            text-transform: uppercase;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-          }
-          .kpi-card p {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 900;
-            color: #0f172a;
-          }
-          .kpi-card.kpi-blue p { color: #0369a1; }
-          .kpi-card.kpi-green p { color: #15803d; }
-          .kpi-card.kpi-indigo p { color: #4338ca; }
-          .kpi-card.kpi-amber p { color: #b45309; }
-          
-          .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            border: 1px solid #cbd5e1;
-          }
-          th {
-            background-color: #f0f4f9;
-            padding: 12px 14px;
-            font-size: 12px;
-            font-weight: 800;
-            border: 1px solid #cbd5e1;
-            color: #334155;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          td {
-            padding: 12px 14px;
-            border: 1px solid #cbd5e1;
-            font-size: 13px;
-            color: #334155;
-          }
-          .status-badge {
-            display: inline-block;
-            padding: 4px 14px;
-            border-radius: 9999px;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-            text-align: center;
-            min-width: 90px;
-          }
-          .status-lunas {
-            background-color: #e6f9f0;
-            color: #0f8b53;
-            border: 1px solid #bbf2d7;
-          }
-          .status-piutang {
-            background-color: #fffbeb;
-            color: #b45309;
-            border: 1px solid #fde68a;
-          }
-          .status-batal {
-            background-color: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
-          }
-          .footer {
-            margin-top: 40px;
-            text-align: center;
-            font-size: 11px;
-            color: #64748b;
-            border-top: 1px dashed #e2e8f0;
-            padding-top: 15px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="title">HL FINANCE</div>
-          <div class="subtitle">Rekapitulasi & Pelaporan Keuangan Bulanan</div>
-          <div class="sub-subtitle">SISTEM ADMINISTRASI BISNIS HL</div>
-        </div>
+    // KPI summary box
+    doc.setFillColor(248, 250, 252);
+    doc.rect(15, y - 3, pageWidth - 30, 10, 'F');
+    doc.setFontSize(8);
+    if (activeReportTab === 'bonus') {
+      doc.text(`Klaim: ${metrics.sudahDibayar} | Unit: ${metrics.sisaPiutang} | Nilai: ${formatRp(metrics.totalSubsidi)} | Status: LUNAS`, 20, y + 3);
+    } else {
+      doc.text(`Omzet: ${formatRp(metrics.omzetLunas)} | Laba: ${formatRp(metrics.labaHL)} | Terbayar: ${formatRp(metrics.sudahDibayar)} | Piutang: ${formatRp(metrics.sisaPiutang)}`, 20, y + 3);
+    }
+    y += 12;
 
-        <div class="meta-section">
-          <div class="meta-left">
-            <span class="meta-label">TIPE LAPORAN</span>: <span class="meta-val">${activeReportTab === 'semua' ? 'KESELURUHAN (LM + BR)' : activeReportTab === 'bonus' ? 'LOG BONUS' : activeReportTab.toUpperCase()}</span><br/>
-            <span class="meta-label">PERIODE</span>: <span class="meta-val">${periodStr.toUpperCase()}</span>
-          </div>
-          <div class="meta-right" style="text-align: right;">
-            <span class="meta-label">DICETAK OLEH</span>: <span class="meta-val">Owner</span><br/>
-            <span class="meta-label">TANGGAL CETAK</span>: <span class="meta-val">${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-          </div>
-        </div>
+    // Table
+    doc.setFontSize(7);
+    doc.setFillColor(240, 244, 249);
+    doc.rect(15, y - 4, pageWidth - 30, 6, 'F');
+    doc.text('NO', 17, y);
+    doc.text('PELANGGAN (KODE)', 30, y);
+    doc.text('TRX', 95, y);
+    const valHeader = activeReportTab === 'bonus' ? 'UNIT BONUS' : 'OMZET LUNAS';
+    doc.text(valHeader, 115, y);
+    doc.text('STATUS', 165, y);
+    y += 5;
+    doc.setDrawColor(200);
+    doc.line(15, y, pageWidth - 15, y);
+    y += 4;
 
-        <div class="report-title-section">
-          ${reportTitle}
-          <div style="font-size: 12px; font-weight: bold; color: #64748b; margin-top: 5px;">PERIODE LAPORAN: ${periodStr.toUpperCase()}</div>
-        </div>
+    customerPerformance.slice(0, 28).forEach((row, idx) => {
+      const val = activeReportTab === 'bonus' ? `${row.omzet} Unit` : formatRp(row.omzet);
+      doc.text(String(idx + 1), 17, y);
+      doc.text(`${row.customer.nama} (${row.customer.kode})`.substring(0, 32), 30, y);
+      doc.text(`${row.totalTransaksi}x`, 95, y);
+      doc.text(val, 115, y);
+      doc.text(row.statusTerakhir, 165, y);
+      y += 4.5;
+      if (y > 265) { doc.addPage(); y = 20; }
+    });
 
-        <div class="kpi-container">
-          ${activeReportTab === 'bonus' ? `
-            <div class="kpi-card kpi-amber">
-              <h4>Total Klaim Bonus</h4>
-              <p>${metrics.sudahDibayar} Kali</p>
-            </div>
-            <div class="kpi-card kpi-blue">
-              <h4>Total Barang Bonus</h4>
-              <p>${metrics.sisaPiutang} Unit</p>
-            </div>
-            <div class="kpi-card kpi-green">
-              <h4>Estimasi Nilai Barang</h4>
-              <p>${formatRp(metrics.totalSubsidi)}</p>
-            </div>
-            <div class="kpi-card kpi-green" style="background-color: #ecfdf5; border-color: #a7f3d0; border-left-color: #10b981;">
-              <h4>Status Klaim</h4>
-              <p style="color: #047857; font-weight: 900; margin-top: 2px;">LUNAS</p>
-            </div>
-          ` : `
-            <div class="kpi-card kpi-blue">
-              <h4>Omzet Lunas</h4>
-              <p>${formatRp(metrics.omzetLunas)}</p>
-            </div>
-            <div class="kpi-card kpi-green">
-              <h4>Total Laba HL</h4>
-              <p>${formatRp(metrics.labaHL)}</p>
-            </div>
-            <div class="kpi-card kpi-indigo">
-              <h4>Piutang Masuk (Terbayar)</h4>
-              <p>${formatRp(metrics.sudahDibayar)}</p>
-            </div>
-            <div class="kpi-card kpi-amber">
-              <h4>Sisa Piutang</h4>
-              <p>${formatRp(metrics.sisaPiutang)}</p>
-            </div>
-          `}
-        </div>
+    y += 4;
+    doc.line(15, y, pageWidth - 15, y);
+    y += 6;
+    doc.setFontSize(7);
+    doc.text('Laporan resmi - Sistem HL Finance (Cash Basis, no PPN)', 20, y);
 
-        <table class="table">
-          <thead>
-            <tr>
-              <th style="width: 60px; text-align: center;">NO</th>
-              <th style="text-align: left;">NAMA PELANGGAN</th>
-              <th style="width: 180px; text-align: center;">JUMLAH TRANSAKSI</th>
-              <th style="width: 220px; text-align: center;">${activeReportTab === 'bonus' ? 'TOTAL UNIT BONUS' : 'OMZET LUNAS'}</th>
-              <th style="width: 180px; text-align: center;">STATUS TERAKHIR</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows.length > 0 ? tableRows : `<tr><td colspan="5" style="padding: 40px; text-align: center; color: #64748b; font-weight: bold; border-bottom: none; font-size: 14px;">Tidak ada data laporan untuk periode ini.</td></tr>`}
-          </tbody>
-        </table>
-
-        <!-- Kolom Tanda Tangan Formal Laporanable -->
-        <div style="margin-top: 60px; display: flex; justify-content: flex-end; page-break-inside: avoid; padding: 0 40px;">
-          <div style="text-align: center; width: 220px;">
-            <p style="margin: 0 0 65px 0; font-size: 12px; font-weight: bold; color: #475569;">Owner Bisnis HL,</p>
-            <div style="border-top: 1.5px solid #64748b; width: 180px; margin: 0 auto;"></div>
-          </div>
-        </div>
-
-        <div class="footer">
-          <em>Laporan ini dibuat secara otomatis oleh sistem administrasi internal HL Finance.</em>
-        </div>
-
-        <script>
-          window.onload = function() { window.print(); }
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+    doc.save(`Laporan-HL-${periodStr.replace(/[^A-Za-z0-9]/g, '')}-${activeReportTab}.pdf`);
   };
+
+
 
   if (detailCustomer) {
     return (

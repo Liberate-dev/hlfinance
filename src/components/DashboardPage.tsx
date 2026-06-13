@@ -19,7 +19,7 @@ interface DashboardPageProps {
 const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const { transactions, customers } = useStore();
+  const { transactions, customers, setShowAddCustomer } = useStore();
 
   const currentMonthYear = new Date().toISOString().substring(0, 7); // e.g. "2026-06"
   const currentMonthBons = transactions.filter(t => t.tanggal.startsWith(currentMonthYear));
@@ -180,7 +180,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
           {/* Tombol Tambah Pelanggan */}
           <button
-            onClick={() => onNavigate('pelanggan')}
+            onClick={() => {
+              onNavigate('pelanggan');
+              setShowAddCustomer(true);
+            }}
             className="flex flex-col items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 text-[#002B8F] font-bold rounded-2xl shadow-sm border-2 border-blue-100/50 transition-all duration-200 active:scale-[0.95] aspect-square space-y-3 cursor-pointer"
           >
             <div className="p-2.5 bg-blue-100 text-[#002B8F] rounded-xl">

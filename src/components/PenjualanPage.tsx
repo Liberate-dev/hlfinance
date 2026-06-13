@@ -6,12 +6,14 @@ import {
   Trash2, Check, AlertTriangle, ArrowLeft,
   Edit3, Printer, CheckCircle2, XCircle
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 
-const formatDate = (dateString: string) => {
+const formatDate = (dateString?: string) => {
   if (!dateString) return '—';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
   const parts = dateString.split('-');
@@ -134,6 +136,7 @@ export default function PenjualanPage() {
   const [formLines, setFormLines] = useState<{
     productId: string;
     qty: number;
+    line_id?: string;
   }[]>([]);
 
   // Settle Modal state
@@ -222,7 +225,7 @@ export default function PenjualanPage() {
     setFormIsBonus(!!t.is_bonus);
     setFormBonusCount(t.bonus_count || 1);
     setFormStatus(t.status === 'Lunas' ? 'Lunas' : 'Open');
-    setFormLines(t.lines.map(l => ({ productId: l.productId || '', qty: l.qty })));
+    setFormLines(t.lines.map(l => ({ productId: l.productId || '', qty: l.qty, line_id: l.line_id })));
     setEditTarget(t);
     setViewMode('edit');
   };
@@ -268,10 +271,15 @@ export default function PenjualanPage() {
       return {
         productName: prod.nama,
         tipe: prod.tipe,
+        tipe_snapshot: prod.tipe,
         qty: line.qty,
         harga_base: basePrice,
+        harga_base_snapshot: basePrice,
         diskon: appliedDiscounts,
+        diskon_terapan_snapshot: appliedDiscounts,
         harga_final: finalPrice,
+        harga_final_unit: finalPrice,
+        harga_modal_snapshot: formIsBonus ? 0 : prod.harga_modal,
       };
     }).filter(Boolean);
 
@@ -285,16 +293,15 @@ export default function PenjualanPage() {
 
   const formCalcs = getFormCalculations();
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formNomorBon.trim()) { alert('Nomor Bon wajib diisi.'); return; }
     if (!formCustomerId) { alert('Pelanggan wajib dipilih.'); return; }
     if (formLines.some(l => !l.productId)) { alert('Semua baris produk harus dipilih.'); return; }
 
     const isEdit = viewMode === 'edit';
-    
-    // Check duplication of Nomor Bon
-    const dup = transactions.some(t => 
-      t.nomor_bon.toLowerCase() === formNomorBon.trim().toLowerCase() && 
+
+    const dup = transactions.some(t =>
+      t.nomor_bon.toLowerCase() === formNomorBon.trim().toLowerCase() &&
       (!isEdit || t.id !== editTarget?.id)
     );
     if (dup) {
@@ -307,19 +314,22 @@ export default function PenjualanPage() {
     const finalLines: BonLine[] = formLines.map(line => {
       const prod = products.find(p => p.id === line.productId)!;
       const appliedDiscounts = prod.tipe === 'LM' ? customer.diskon_lm : customer.diskon_br;
-      
-      // Snapshot pricing as required by PRD
       const modal = formIsBonus ? 0 : prod.harga_modal;
       const finalUnit = formIsBonus ? 0 : calculateFinalPrice(prod.harga_base, appliedDiscounts);
 
       return {
+        line_id: line.line_id,
         productId: prod.id,
         productName: prod.nama,
         tipe: prod.tipe,
+        tipe_snapshot: prod.tipe,
         qty: line.qty,
         harga_base: prod.harga_base,
+        harga_base_snapshot: prod.harga_base,
         diskon: appliedDiscounts,
+        diskon_terapan_snapshot: appliedDiscounts,
         harga_final: finalUnit,
+        harga_final_unit: finalUnit,
         harga_modal_snapshot: modal
       };
     });
@@ -327,13 +337,13 @@ export default function PenjualanPage() {
     const omzet = finalLines.reduce((sum, l) => sum + (l.harga_final * l.qty), 0);
 
     const newBon: Bon = {
-      id: isEdit ? editTarget!.id : `bon-${Date.now()}`,
+      id: isEdit ? editTarget!.id : '',
       nomor_bon: formNomorBon.trim(),
       tanggal: formTanggal,
       customer_id: formCustomerId,
       customerName: customer.nama,
       ongkir: formOngkir,
-      omzet: omzet,
+      omzet,
       status: formIsBonus ? 'Lunas' : formStatus,
       tanggal_lunas: formIsBonus ? formTanggal : (formStatus === 'Lunas' ? formTanggal : undefined),
       locked_at: formIsBonus || formStatus === 'Lunas' ? new Date().toISOString() : undefined,
@@ -343,12 +353,17 @@ export default function PenjualanPage() {
       lines: finalLines
     };
 
+    const err = isEdit ? await updateTransaction(newBon) : await addTransaction(newBon);
+    if (err) {
+      alert(err);
+      return;
+    }
+
     if (isEdit) {
-      updateTransaction(newBon);
       showToast(`Transaksi "${newBon.nomor_bon}" berhasil diperbarui!`);
-      setSelectedBon(newBon);
+      const updated = useStore.getState().transactions.find(t => t.id === editTarget?.id);
+      if (updated) setSelectedBon(updated);
     } else {
-      addTransaction(newBon);
       showToast(`Transaksi "${newBon.nomor_bon}" berhasil disimpan!`);
       setSelectedBon(null);
     }
@@ -357,131 +372,219 @@ export default function PenjualanPage() {
     setEditTarget(null);
   };
 
-  const confirmSettle = () => {
-    if (settleTargetId) {
-      settleTransaction(settleTargetId, settleDate);
-      setSettleTargetId(null);
-      showToast('Bon berhasil dilunasi!');
-      // Update selectedBon detail view if it's currently open
-      const updated = useStore.getState().transactions.find(t => t.id === selectedBon?.id);
-      if (updated) setSelectedBon(updated);
-    }
+  const confirmSettle = async () => {
+    if (!settleTargetId) return;
+    const err = await settleTransaction(settleTargetId, settleDate);
+    if (err) { alert(err); return; }
+    setSettleTargetId(null);
+    showToast('Bon berhasil dilunasi!');
+    const updated = useStore.getState().transactions.find(t => t.id === selectedBon?.id);
+    if (updated) setSelectedBon(updated);
   };
 
-  const confirmCancel = () => {
-    if (cancelTargetId) {
-      cancelTransaction(cancelTargetId);
-      setCancelTargetId(null);
-      showToast('Bon berhasil dibatalkan.');
-      const updated = useStore.getState().transactions.find(t => t.id === selectedBon?.id);
-      if (updated) setSelectedBon(updated);
-    }
+  const confirmCancel = async () => {
+    if (!cancelTargetId) return;
+    const err = await cancelTransaction(cancelTargetId);
+    if (err) { alert(err); return; }
+    setCancelTargetId(null);
+    showToast('Bon berhasil dibatalkan.');
+    const updated = useStore.getState().transactions.find(t => t.id === selectedBon?.id);
+    if (updated) setSelectedBon(updated);
   };
 
-  const confirmDelete = () => {
-    if (deleteTargetId) {
-      deleteTransaction(deleteTargetId);
-      setDeleteTargetId(null);
-      setSelectedBon(null);
-      showToast('Bon berhasil dihapus.');
-    }
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    const err = await deleteTransaction(deleteTargetId);
+    if (err) { alert(err); return; }
+    setDeleteTargetId(null);
+    setSelectedBon(null);
+    showToast('Bon berhasil dihapus.');
   };
 
-  // Mock PDF generation & Print
-  const handlePrint = (bon: Bon) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    
-    const linesHtml = bon.lines.map(l => `
-      <tr>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace;">${l.productName}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace; text-align: center;">${l.tipe}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace; text-align: center;">${l.qty}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace; text-align: right;">${formatRp(l.harga_base)}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace; text-align: center;">${l.diskon.length > 0 ? l.diskon.map(d => `${d}%`).join(' + ') : '—'}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace; text-align: right;">${formatRp(l.harga_final)}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; font-family: monospace; text-align: right; font-weight: bold;">${formatRp(l.harga_final * l.qty)}</td>
-      </tr>
-    `).join('');
+  // Helper to create PDF from canvas with proper sizing to match preview aspect (no extra white space, fills the "page" like the form)
+  const createPdfFromCanvas = (canvas, fileName) => {
+    const imgData = canvas.toDataURL('image/png');
+    const aspect = canvas.width / canvas.height;
+    const pdfWidth = 210; // mm A4 width
+    const pdfHeight = pdfWidth / aspect;
+    const pdf = new jsPDF('p', 'mm', [pdfWidth, pdfHeight]);
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH, undefined, 'NONE');
+    pdf.save(fileName);
+  };
 
-    printWindow.document.write(`
-      <html>
-      <head>
-        <title>BON - ${bon.nomor_bon}</title>
-        <style>
-          body { font-family: sans-serif; padding: 40px; color: #333; }
-          .header { display: flex; justify-content: space-between; border-bottom: 3px solid #002B8F; padding-bottom: 20px; margin-bottom: 30px; }
-          .title { font-size: 28px; font-weight: bold; color: #002B8F; }
-          .meta { font-size: 14px; line-height: 1.6; }
-          .table { w-full; border-collapse: collapse; margin-top: 20px; }
-          th { background-color: #f5f5f5; padding: 12px 10px; text-align: left; font-size: 13px; font-weight: bold; border-bottom: 2px solid #ddd; }
-          .totals { margin-top: 30px; margin-left: auto; width: 350px; font-size: 15px; line-height: 2; }
-          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #777; border-top: 1px dashed #ccc; padding-top: 20px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="title">HL FINANCE</div>
-            <div style="font-size: 12px; color: #666; margin-top: 5px;">Pencatatan Transaksi & Piutang Internal</div>
+  // Helper to always generate nice PDF matching the preview layout (using temp offscreen div if no visible preview)
+  const generateNotaPDF = (bon) => {
+    const temp = document.createElement('div');
+    temp.style.position = 'absolute';
+    temp.style.left = '-9999px';
+    temp.style.top = '-9999px';
+    temp.style.width = '620px';
+    temp.style.fontFamily = 'system-ui, sans-serif';
+    // copy the exact structure from the visible preview to make canvas identical
+
+    const lines = bon.lines || [];
+    const hasOngkir = bon.ongkir > 0;
+
+    let dataRows = '';
+    lines.forEach(l => {
+      const sub = l.harga_final * l.qty;
+      dataRows += `<tr class="even:bg-gray-50"><td class="border border-gray-700 text-center p-1 font-medium">${l.qty}</td><td class="border border-gray-700 p-1">${l.productName}</td><td class="border border-gray-700 text-right p-1 font-mono">${formatRp(l.harga_final)}</td><td class="border border-gray-700 text-right p-1 font-mono font-bold">${formatRp(sub)}</td></tr>`;
+    });
+    if (hasOngkir) {
+      dataRows += `<tr><td class="border border-gray-700 text-center p-1">1</td><td class="border border-gray-700 p-1">Ongkos Kirim (pass-through)</td><td class="border border-gray-700 text-right p-1 font-mono">${formatRp(bon.ongkir)}</td><td class="border border-gray-700 text-right p-1 font-mono">${formatRp(bon.ongkir)}</td></tr>`;
+    }
+
+    const total = bon.omzet + bon.ongkir;
+
+    temp.innerHTML = `
+      <div class="bg-white border-2 border-gray-500 p-3 text-[9px] leading-snug shadow-md" style="width: 620px; font-family: system-ui, sans-serif;">
+        <div class="flex justify-between items-start border-b border-gray-300 pb-1 mb-1">
+          <div class="text-left">
+            <div class="text-[14px] font-bold tracking-wider" style="font-family: Georgia, serif;">HL Finance</div>
+            <div class="text-[7px] text-gray-600">Manajemen Penjualan & Piutang Internal</div>
           </div>
-          <div class="meta" style="text-align: right;">
-            <strong>No Bon:</strong> ${bon.nomor_bon}<br/>
-            <strong>Tanggal:</strong> ${formatDate(bon.tanggal)}<br/>
-            <strong>Status:</strong> ${bon.status === 'Lunas' ? 'LUNAS' : bon.status === 'Cancelled' ? 'BATAL' : 'PIUTANG'}
+          <div class="border border-gray-500 p-1 text-[7px] w-36 leading-tight bg-gray-50">
+            Tanggal : ${bon.tanggal}<br/>
+            Kepada Yth : ${bon.customerName}
           </div>
         </div>
-        
-        <div class="meta" style="margin-bottom: 30px;">
-          <strong>Kepada Pelanggan:</strong><br/>
-          <span style="font-size: 18px; font-weight: bold; color: #111;">${bon.customerName}</span><br/>
-          ${bon.deskripsi ? `<div style="margin-top: 10px; font-style: italic; color: #555;">Catatan: ${bon.deskripsi}</div>` : ''}
-        </div>
-
-        <table width="100%" class="table">
+        <div class="text-[8px] font-mono mb-1">Nota No. : ${bon.nomor_bon}</div>
+        <table class="w-full border-2 border-gray-700 text-[8px]">
           <thead>
-            <tr>
-              <th>Nama Produk</th>
-              <th style="text-align: center;">Tipe</th>
-              <th style="text-align: center;">Qty</th>
-              <th style="text-align: right;">Harga Base</th>
-              <th style="text-align: center;">Diskon</th>
-              <th style="text-align: right;">Harga Final</th>
-              <th style="text-align: right;">Subtotal</th>
+            <tr class="bg-gray-900 text-white">
+              <th class="border border-gray-700 p-1 text-center w-14 font-bold">Banyaknya</th>
+              <th class="border border-gray-700 p-1 font-bold">Nama Produk/Treatment</th>
+              <th class="border border-gray-700 p-1 text-right w-16 font-bold">@ Harga</th>
+              <th class="border border-gray-700 p-1 text-right w-16 font-bold">Jumlah</th>
             </tr>
           </thead>
           <tbody>
-            ${linesHtml}
+            ${dataRows}
           </tbody>
         </table>
-
-        <table class="totals">
-          <tr>
-            <td style="color: #666;">Omzet Transaksi:</td>
-            <td style="text-align: right; font-weight: bold;">${formatRp(bon.omzet)}</td>
-          </tr>
-          <tr>
-            <td style="color: #666;">Ongkos Kirim:</td>
-            <td style="text-align: right; font-weight: bold;">${formatRp(bon.ongkir)}</td>
-          </tr>
-          <tr style="border-top: 2px solid #002B8F; font-size: 18px;">
-            <td style="font-weight: bold; color: #002B8F;">Total Tagihan:</td>
-            <td style="text-align: right; font-weight: bold; color: #002B8F;">${formatRp(bon.omzet + bon.ongkir)}</td>
-          </tr>
-        </table>
-
-        <div class="footer">
-          Terima kasih atas kerja samanya.<br/>
-          <em>Dokumen ini sah dan dicetak secara otomatis melalui Sistem HL Finance.</em>
+        <div class="flex justify-between items-end mt-2 text-[8px]">
+          <div class="text-left">
+            Tanda Terima<br/>
+            <div class="border-b-2 border-gray-700 w-20 mt-1"></div>
+          </div>
+          <div class="text-left">
+            Kasir<br/>
+            <div class="border-b-2 border-gray-700 w-20 mt-1"></div>
+          </div>
+          <div class="border-2 border-gray-700 bg-gray-100 px-2 py-1 text-right text-[9px] font-black">
+            TOTAL<br/>${formatRp(total)}
+          </div>
         </div>
+        <div class="text-[6px] text-gray-500 text-right mt-1">Catatan: Barang yang sudah dibeli tidak dapat dikembalikan. Sistem HL Finance (Cash Basis).</div>
+      </div>
+    `;
 
-        <script>
-          window.onload = function() { window.print(); }
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+    document.body.appendChild(temp);
+
+    html2canvas(temp, { scale: 4, backgroundColor: '#ffffff' }).then(canvas => {
+      createPdfFromCanvas(canvas, `Nota-${bon.nomor_bon || 'bon'}.pdf`);
+      document.body.removeChild(temp);
+    }).catch(e => {
+      console.error('PDF capture failed', e);
+      document.body.removeChild(temp);
+      doManualPDF(bon);
+    });
+  };
+
+  const handlePrint = (bon) => {
+    const el = document.getElementById('nota-preview-bon') || document.getElementById('nota-preview-detail');
+    if (el) {
+      html2canvas(el, { scale: 4, backgroundColor: '#ffffff' }).then(canvas => {
+        createPdfFromCanvas(canvas, `Nota-${bon.nomor_bon || 'bon'}.pdf`);
+      }).catch(() => generateNotaPDF(bon));
+      return;
+    }
+    generateNotaPDF(bon);
+  };
+
+  const doManualPDF = (bon: Bon) => {
+    // kept as last resort, but now rarely used
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 15;
+
+    doc.setFillColor(0, 43, 143);
+    doc.rect(15, y - 5, pageWidth - 30, 18, 'F');
+    doc.setTextColor(255);
+    doc.setFontSize(14);
+    doc.text('HL FINANCE', 20, y + 3);
+    doc.setFontSize(8);
+    doc.text('Pencatatan Transaksi & Piutang Internal', 20, y + 9);
+    doc.setTextColor(0);
+    doc.text(`No: ${bon.nomor_bon}`, pageWidth - 20, y, { align: 'right' });
+    doc.text(`${formatDate(bon.tanggal)} | ${bon.status}`, pageWidth - 20, y + 5, { align: 'right' });
+    y += 20;
+
+    doc.setFontSize(10);
+    doc.text('Kepada Pelanggan:', 20, y);
+    y += 5;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(bon.customerName, 20, y);
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+    if (bon.deskripsi) {
+      doc.setFontSize(9);
+      doc.text(`Catatan: ${bon.deskripsi}`, 20, y);
+      y += 5;
+    }
+    y += 3;
+
+    doc.setFontSize(8);
+    doc.setFillColor(240, 244, 249);
+    doc.rect(15, y - 4, pageWidth - 30, 7, 'F');
+    doc.text('Produk', 17, y);
+    doc.text('Tipe', 85, y);
+    doc.text('Qty', 105, y);
+    doc.text('Harga Final', 125, y);
+    doc.text('Subtotal', 165, y);
+    y += 6;
+    doc.setDrawColor(200);
+    doc.line(15, y, pageWidth - 15, y);
+    y += 4;
+
+    bon.lines.forEach((l) => {
+      const sub = l.harga_final * l.qty;
+      doc.text(l.productName.substring(0, 28), 17, y);
+      doc.text(l.tipe, 85, y);
+      doc.text(String(l.qty), 105, y);
+      doc.text(formatRp(l.harga_final).replace('Rp ', ''), 125, y);
+      doc.text(formatRp(sub).replace('Rp ', ''), 165, y);
+      y += 5;
+      if (y > 250) { doc.addPage(); y = 20; }
+    });
+
+    y += 3;
+    doc.line(15, y, pageWidth - 15, y);
+    y += 6;
+
+    doc.setFontSize(9);
+    doc.text('Omzet Transaksi:', 125, y);
+    doc.text(formatRp(bon.omzet), 165, y, { align: 'right' });
+    y += 5;
+    doc.text('Ongkir (pass-through):', 125, y);
+    doc.text(formatRp(bon.ongkir), 165, y, { align: 'right' });
+    y += 5;
+    doc.setFontSize(11);
+    doc.setTextColor(0, 43, 143);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL TAGIHAN:', 125, y);
+    doc.text(formatRp(bon.omzet + bon.ongkir), 165, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    y += 10;
+
+    doc.setFontSize(7);
+    doc.setTextColor(100);
+    doc.text('Dokumen sah - Sistem HL Finance (Cash Basis)', 20, y);
+
+    doc.save(`BON-${bon.nomor_bon.replace(/[^A-Za-z0-9]/g, '')}.pdf`);
   };
 
   const renderList = () => (
@@ -490,9 +593,9 @@ export default function PenjualanPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/50 pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Catatan Penjualan</h1>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Pencatatan Bon</h1>
           <p className="text-slate-500 text-base font-semibold mt-1">
-            Pantau transaksi dan status pembayaran bon pelanggan
+            Catat dan kelola bon penjualan pelanggan
           </p>
         </div>
       </div>
@@ -553,7 +656,7 @@ export default function PenjualanPage() {
             <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[#002B8F] shrink-0 font-bold">
               <Plus size={16} className="stroke-[3.5]" />
             </div>
-            <span>Catat Bon Baru</span>
+            <span>Buat Bon Baru</span>
           </button>
         </div>
 
@@ -1044,12 +1147,12 @@ export default function PenjualanPage() {
                           </td>
                           <td className="p-3 text-right font-mono font-bold text-blue-900">{formatRp(finalUnit)}</td>
                           <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 min-w-[110px]">
+                            <div className="flex items-center justify-center gap-1 min-w-[100px]">
                               <button
                                 type="button"
                                 onClick={() => handleLineQtyChange(idx, line.qty - 1)}
-                                className="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-slate-250 border border-slate-300 text-slate-700 font-extrabold rounded-lg transition-all cursor-pointer text-base select-none active:scale-[0.9] shadow-2xs"
-                                style={{ minWidth: '32px', minHeight: '32px' }}
+                                className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold rounded-md transition-all cursor-pointer text-sm select-none active:scale-[0.9]"
+                                style={{ minWidth: '28px', minHeight: '28px' }}
                               >
                                 -
                               </button>
@@ -1058,13 +1161,13 @@ export default function PenjualanPage() {
                                 min={1}
                                 value={line.qty}
                                 onChange={e => handleLineQtyChange(idx, Number(e.target.value))}
-                                className="w-12 px-1 py-1 border border-slate-200 rounded-lg text-center font-black text-sm text-slate-900 focus:outline-none focus:border-[#002B8F] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                className="w-8 h-7 px-0 py-0 bg-[#002B8F] text-white font-black rounded-md text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                               <button
                                 type="button"
                                 onClick={() => handleLineQtyChange(idx, line.qty + 1)}
-                                className="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-slate-250 border border-slate-300 text-slate-700 font-extrabold rounded-lg transition-all cursor-pointer text-base select-none active:scale-[0.9] shadow-2xs"
-                                style={{ minWidth: '32px', minHeight: '32px' }}
+                                className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold rounded-md transition-all cursor-pointer text-sm select-none active:scale-[0.9]"
+                                style={{ minWidth: '28px', minHeight: '28px' }}
                               >
                                 +
                               </button>
@@ -1197,8 +1300,103 @@ export default function PenjualanPage() {
 
             </div>
 
+            {/* Live Preview Nota - format seperti contoh image, auto dari input, user bisa edit bebas via form di atas */}
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-slate-600">Preview Nota (auto input, preview real-time, edit via form)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('nota-preview-bon');
+                    if (el) {
+                      html2canvas(el, { scale: 4, backgroundColor: '#ffffff' }).then(canvas => {
+                        const imgData = canvas.toDataURL('image/png');
+                        const aspect = canvas.width / canvas.height;
+                        const pdfWidth = 210;
+                        const pdfHeight = pdfWidth / aspect;
+                        const pdf = new jsPDF('p', 'mm', [pdfWidth, pdfHeight]);
+                        const pageW = pdf.internal.pageSize.getWidth();
+                        const pageH = pdf.internal.pageSize.getHeight();
+                        pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH, undefined, 'NONE');
+                        pdf.save(`Nota-Preview-${formNomorBon || 'baru'}.pdf`);
+                      });
+                    }
+                  }}
+                  className="text-xs px-3 py-1 border border-slate-300 hover:bg-slate-100 rounded font-bold cursor-pointer"
+                >
+                  Unduh PDF (exact dari preview)
+                </button>
+              </div>
+              <div className="flex justify-center bg-gray-50 p-3 rounded">
+                <div id="nota-preview-bon" className="bg-white border-2 border-gray-500 p-3 text-[9px] leading-snug shadow-md" style={{width: '620px', fontFamily: 'system-ui, sans-serif'}}>
+                  <div className="flex justify-between items-start border-b border-gray-300 pb-1 mb-1">
+                    <div className="text-left">
+                      <div className="text-[14px] font-bold tracking-wider" style={{fontFamily: 'Georgia, serif'}}>HL Finance</div>
+                      <div className="text-[7px] text-gray-600">Manajemen Penjualan & Piutang Internal</div>
+                    </div>
+                    <div className="border border-gray-500 p-1 text-[7px] w-36 leading-tight bg-gray-50">
+                      Tanggal : {formTanggal}<br/>
+                      Kepada Yth : {selectedCustomer ? selectedCustomer.nama : ''}{selectedCustomer?.alamat ? ', ' + selectedCustomer.alamat.substring(0,25) : ''}
+                    </div>
+                  </div>
+                  <div className="text-[8px] font-mono mb-1">Nota No. : {formNomorBon}</div>
+                  <table className="w-full border-2 border-gray-700 text-[8px]">
+                    <thead>
+                      <tr className="bg-gray-900 text-white">
+                        <th className="border border-gray-700 p-1 text-center w-14 font-bold">Banyaknya</th>
+                        <th className="border border-gray-700 p-1 font-bold">Nama Produk/Treatment</th>
+                        <th className="border border-gray-700 p-1 text-right w-16 font-bold">@ Harga</th>
+                        <th className="border border-gray-700 p-1 text-right w-16 font-bold">Jumlah</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(formCalcs.lines || []).filter(Boolean).map((l: any, idx) => (
+                        <tr key={idx} className="even:bg-gray-50">
+                          <td className="border border-gray-700 text-center p-1 font-medium">{l.qty}</td>
+                          <td className="border border-gray-700 p-1">{l.productName}</td>
+                          <td className="border border-gray-700 text-right p-1 font-mono">{formatRp(l.harga_final)}</td>
+                          <td className="border border-gray-700 text-right p-1 font-mono font-bold">{formatRp(l.harga_final * l.qty)}</td>
+                        </tr>
+                      ))}
+                      {formOngkir > 0 && (
+                        <tr>
+                          <td className="border border-gray-700 text-center p-1">1</td>
+                          <td className="border border-gray-700 p-1">Ongkos Kirim (pass-through)</td>
+                          <td className="border border-gray-700 text-right p-1 font-mono">{formatRp(formOngkir)}</td>
+                          <td className="border border-gray-700 text-right p-1 font-mono">{formatRp(formOngkir)}</td>
+                        </tr>
+                      )}
+                      {Array.from({length: Math.max(0, 5 - (formCalcs.lines || []).length - (formOngkir > 0 ? 1 : 0))}).map((_,i) => (
+                        <tr key={'e'+i}>
+                          <td className="border border-gray-700 p-1 h-5"></td>
+                          <td className="border border-gray-700 p-1"></td>
+                          <td className="border border-gray-700 p-1"></td>
+                          <td className="border border-gray-700 p-1"></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="flex justify-between items-end mt-2 text-[8px]">
+                    <div className="text-left">
+                      Tanda Terima<br/>
+                      <div className="border-b-2 border-gray-700 w-20 mt-1"></div>
+                    </div>
+                    <div className="text-left">
+                      Kasir<br/>
+                      <div className="border-b-2 border-gray-700 w-20 mt-1"></div>
+                    </div>
+                    <div className="border-2 border-gray-700 bg-gray-100 px-2 py-1 text-right text-[9px] font-black">
+                      TOTAL<br/>{formatRp(formCalcs.grandTotal)}
+                    </div>
+                  </div>
+                  <div className="text-[6px] text-gray-500 text-right mt-1">Catatan: Barang yang sudah dibeli tidak dapat dikembalikan. Sistem HL Finance (Cash Basis).</div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
+
       </div>
     );
   };
@@ -1375,6 +1573,68 @@ export default function PenjualanPage() {
               <div className="border-t-2 border-slate-200 pt-3.5 flex justify-between items-center text-slate-950 font-black">
                 <span className="text-[18px]">Total Tagihan:</span>
                 <span className="font-mono text-[28px] text-[#002B8F] tracking-tight">{formatRp(totalTagihan)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Nota in Detail - larger, exact format for PDF capture */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="text-sm font-bold text-slate-600 mb-2">Format Nota (untuk cetak, match preview form)</div>
+            <div className="flex justify-center bg-gray-50 p-3 rounded">
+              <div id="nota-preview-detail" className="bg-white border-2 border-gray-500 p-3 text-[9px] leading-snug shadow-md" style={{width: '620px', fontFamily: 'system-ui, sans-serif'}}>
+                <div className="flex justify-between items-start border-b border-gray-300 pb-1 mb-1">
+                  <div className="text-left">
+                    <div className="text-[14px] font-bold tracking-wider" style={{fontFamily: 'Georgia, serif'}}>HL Finance</div>
+                    <div className="text-[7px] text-gray-600">Manajemen Penjualan & Piutang Internal</div>
+                  </div>
+                  <div className="border border-gray-500 p-1 text-[7px] w-36 leading-tight bg-gray-50">
+                    Tanggal : {selectedBon.tanggal}<br/>
+                    Kepada Yth : {selectedBon.customerName}
+                  </div>
+                </div>
+                <div className="text-[8px] font-mono mb-1">Nota No. : {selectedBon.nomor_bon}</div>
+                <table className="w-full border-2 border-gray-700 text-[8px]">
+                  <thead>
+                    <tr className="bg-gray-900 text-white">
+                      <th className="border border-gray-700 p-1 text-center w-14 font-bold">Banyaknya</th>
+                      <th className="border border-gray-700 p-1 font-bold">Nama Produk/Treatment</th>
+                      <th className="border border-gray-700 p-1 text-right w-16 font-bold">@ Harga</th>
+                      <th className="border border-gray-700 p-1 text-right w-16 font-bold">Jumlah</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selectedBon.lines || []).map((l, idx) => (
+                      <tr key={idx} className="even:bg-gray-50">
+                        <td className="border border-gray-700 text-center p-1 font-medium">{l.qty}</td>
+                        <td className="border border-gray-700 p-1">{l.productName}</td>
+                        <td className="border border-gray-700 text-right p-1 font-mono">{formatRp(l.harga_final)}</td>
+                        <td className="border border-gray-700 text-right p-1 font-mono font-bold">{formatRp(l.harga_final * l.qty)}</td>
+                      </tr>
+                    ))}
+                    {selectedBon.ongkir > 0 && (
+                      <tr>
+                        <td className="border border-gray-700 text-center p-1">1</td>
+                        <td className="border border-gray-700 p-1">Ongkos Kirim (pass-through)</td>
+                        <td className="border border-gray-700 text-right p-1 font-mono">{formatRp(selectedBon.ongkir)}</td>
+                        <td className="border border-gray-700 text-right p-1 font-mono">{formatRp(selectedBon.ongkir)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                <div className="flex justify-between items-end mt-2 text-[8px]">
+                  <div className="text-left">
+                    Tanda Terima<br/>
+                    <div className="border-b-2 border-gray-700 w-20 mt-1"></div>
+                  </div>
+                  <div className="text-left">
+                    Kasir<br/>
+                    <div className="border-b-2 border-gray-700 w-20 mt-1"></div>
+                  </div>
+                  <div className="border-2 border-gray-700 bg-gray-100 px-2 py-1 text-right text-[9px] font-black">
+                    TOTAL<br/>{formatRp(selectedBon.omzet + selectedBon.ongkir)}
+                  </div>
+                </div>
+                <div className="text-[6px] text-gray-500 text-right mt-1">Catatan: Barang yang sudah dibeli tidak dapat dikembalikan. Sistem HL Finance (Cash Basis).</div>
               </div>
             </div>
           </div>

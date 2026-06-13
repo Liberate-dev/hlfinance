@@ -19,7 +19,7 @@ export default function DashboardLayout({
     { id: 'beranda', label: 'Beranda', icon: Home },
     { id: 'pelanggan', label: 'Pelanggan', icon: Users },
     { id: 'produk', label: 'Produk', icon: Package },
-    { id: 'penjualan', label: 'Catatan Penjualan', icon: FileText },
+    { id: 'penjualan', label: 'Pencatatan Bon', icon: FileText },
     { id: 'laporan', label: 'Laporan', icon: BarChart2 },
   ];
 
@@ -30,11 +30,8 @@ export default function DashboardLayout({
         {/* Header Sidebar */}
         <div className="p-6 border-b border-slate-100 shrink-0">
           <h2 className="text-2xl font-extrabold text-[#002B8F] tracking-tight">
-            Bisnis HL
+            HL Finance
           </h2>
-          <p className="text-gray-400 text-xs font-semibold mt-0.5 uppercase tracking-wider">
-            Manajemen Internal
-          </p>
         </div>
 
         {/* Menu Navigasi */}

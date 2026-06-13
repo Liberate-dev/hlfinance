@@ -156,28 +156,27 @@ export default function ProdukPage() {
 
   // ── Save handlers ─────────────────────────────────────────────────────────────
 
-  const handleSaveAdd = () => {
+  const handleSaveAdd = async () => {
     const err = validateForm(false);
     if (err) { alert(err); return; }
-    const newP: Produk = {
-      id: `p-${Date.now()}`,
+    const saveErr = await addProduct({
       kode: effectiveKode.trim(),
       nama: formNama.trim(),
       tipe: formTipe,
       harga_modal: formHargaModal,
       harga_base: formHargaBase,
       deleted_at: null,
-    };
-    addProduct(newP);
-    showSuccess(`Produk "${newP.nama}" berhasil ditambahkan!`);
+    });
+    if (saveErr) { alert(saveErr); return; }
+    showSuccess(`Produk "${formNama.trim()}" berhasil ditambahkan!`);
     backToList();
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editTarget) return;
     const err = validateForm(true);
     if (err) { alert(err); return; }
-    updateProduct({
+    const saveErr = await updateProduct({
       ...editTarget,
       kode: effectiveKode.trim(),
       nama: formNama.trim(),
@@ -185,12 +184,14 @@ export default function ProdukPage() {
       harga_modal: formHargaModal,
       harga_base: formHargaBase
     });
+    if (saveErr) { alert(saveErr); return; }
     showSuccess(`Produk "${formNama.trim()}" berhasil disimpan!`);
     backToList();
   };
 
-  const handleSoftDelete = (id: string) => {
-    deleteProduct(id);
+  const handleSoftDelete = async (id: string) => {
+    const err = await deleteProduct(id);
+    if (err) { alert(err); return; }
     setConfirmDeleteId(null);
     showSuccess('Produk berhasil dihapus. Data transaksi lama tetap tersimpan.');
   };
