@@ -16,7 +16,8 @@ Jalankan berurutan dari folder **`sql-editor/`** (lebih aman, per step):
 3. `03_functions_helpers.sql` → Run
 4. `04_functions_bon.sql` → Run
 5. `05_rls_grants.sql` → Run
-6. `../migrations/20240613000002_seed_dev.sql` (opsional, data contoh)
+6. `../migrations/20240613000002_seed_dev.sql` (opsional, pelanggan + produk)
+7. `06_seed_reports.sql` atau `../migrations/20240613000003_seed_reports.sql` (opsional, ~140 transaksi untuk uji laporan)
 
 Cara copy yang benar: buka file di VS Code/Cursor → Ctrl+A → Ctrl+C → paste ke SQL Editor.
 

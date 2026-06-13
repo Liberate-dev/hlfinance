@@ -122,10 +122,28 @@ export default function PelangganPage() {
   const [newLmDiscountAdd, setNewLmDiscountAdd] = useState<string>('');
   const [newBrDiscountAdd, setNewBrDiscountAdd] = useState<string>('');
 
+  const startAddCustomerForm = () => {
+    setAddCustomerForm({
+      id: '',
+      kode: '',
+      nama: '',
+      diskon_lm: [],
+      diskon_br: [],
+      threshold_bonus: 10000000,
+      accumulated_omzet: 0,
+      bonus_claimed: 0,
+      telepon: '',
+      alamat: '',
+    });
+    setNewLmDiscountAdd('');
+    setNewBrDiscountAdd('');
+    setIsAddingCustomer(true);
+  };
+
   // Sync direct open add from dashboard
   useEffect(() => {
     if (showAddCustomer) {
-      setIsAddingCustomer(true);
+      startAddCustomerForm();
       setShowAddCustomer(false);
     }
   }, [showAddCustomer, setShowAddCustomer]);
@@ -663,23 +681,7 @@ export default function PelangganPage() {
               </p>
             </div>
             <button
-              onClick={() => {
-                setAddCustomerForm({
-                  id: '',
-                  kode: '',
-                  nama: '',
-                  diskon_lm: [],
-                  diskon_br: [],
-                  threshold_bonus: 10000000,
-                  accumulated_omzet: 0,
-                  bonus_claimed: 0,
-                  telepon: '',
-                  alamat: ''
-                });
-                setIsAddingCustomer(true);
-                setNewLmDiscountAdd('');
-                setNewBrDiscountAdd('');
-              }}
+              onClick={startAddCustomerForm}
               className="flex items-center justify-center space-x-2.5 px-6 py-3.5 bg-[#002B8F] hover:bg-[#001E66] text-white font-extrabold rounded-xl shadow-md transition-all shrink-0 cursor-pointer"
               style={{ minHeight: '48px' }}
             >

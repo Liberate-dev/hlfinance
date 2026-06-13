@@ -13,7 +13,7 @@ import {
 import { useStore } from '../store/useStore';
 
 interface DashboardPageProps {
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string, options?: { openBonForm?: boolean }) => void;
 }
 
 const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
@@ -147,7 +147,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-5">
           {/* Tombol Buat Bon Baru */}
           <button
-            onClick={() => onNavigate('penjualan')}
+            onClick={() => onNavigate('penjualan', { openBonForm: true })}
             className="flex flex-col items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 text-[#002B8F] font-bold rounded-2xl shadow-sm border-2 border-blue-100/50 transition-all duration-200 active:scale-[0.95] aspect-square space-y-3 cursor-pointer"
           >
             <div className="p-2.5 bg-blue-100 text-[#002B8F] rounded-xl">
@@ -181,8 +181,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           {/* Tombol Tambah Pelanggan */}
           <button
             onClick={() => {
-              onNavigate('pelanggan');
               setShowAddCustomer(true);
+              onNavigate('pelanggan');
             }}
             className="flex flex-col items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 text-[#002B8F] font-bold rounded-2xl shadow-sm border-2 border-blue-100/50 transition-all duration-200 active:scale-[0.95] aspect-square space-y-3 cursor-pointer"
           >

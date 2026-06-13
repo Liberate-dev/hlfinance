@@ -13,7 +13,24 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState('beranda');
+  const [penjualanStartInAdd, setPenjualanStartInAdd] = useState(false);
+  const [penjualanSessionKey, setPenjualanSessionKey] = useState(0);
   const { fetchAllData, isLoading, isHydrated, dataError } = useStore();
+
+  const navigateTo = (tab: string, options?: { openBonForm?: boolean }) => {
+    if (tab === 'penjualan') {
+      setPenjualanStartInAdd(!!options?.openBonForm);
+      setPenjualanSessionKey((k) => k + 1);
+    } else {
+      setPenjualanStartInAdd(false);
+    }
+    setActiveTab(tab);
+  };
+
+  const navigateSidebar = (tab: string) => {
+    setPenjualanStartInAdd(false);
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -65,17 +82,22 @@ function App() {
 
     switch (activeTab) {
       case 'beranda':
-        return <DashboardPage onNavigate={setActiveTab} />;
+        return <DashboardPage onNavigate={navigateTo} />;
       case 'pelanggan':
         return <PelangganPage />;
       case 'produk':
         return <ProdukPage />;
       case 'penjualan':
-        return <PenjualanPage />;
+        return (
+          <PenjualanPage
+            key={penjualanSessionKey}
+            startInAddMode={penjualanStartInAdd}
+          />
+        );
       case 'laporan':
         return <LaporanPage />;
       default:
-        return <DashboardPage onNavigate={setActiveTab} />;
+        return <DashboardPage onNavigate={navigateTo} />;
     }
   };
 
@@ -94,10 +116,11 @@ function App() {
   return (
     <DashboardLayout
       activeTab={activeTab}
-      setActiveTab={setActiveTab}
+      setActiveTab={navigateSidebar}
       onLogout={async () => {
         await supabase.auth.signOut();
         setIsLoggedIn(false);
+        setPenjualanStartInAdd(false);
         setActiveTab('beranda');
       }}
     >
