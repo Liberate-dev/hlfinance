@@ -1,18 +1,84 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
-import type { Customer } from '../store/useStore';
-import jsPDF from 'jspdf';
+import type { Bon, Customer } from '../store/useStore';
 
-const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
+const formatRp = (n: number) => 'Rp ' + (Number.isFinite(n) ? n : 0).toLocaleString('id-ID');
+
+type ReportTab = 'semua' | 'LM' | 'BR' | 'bonus';
+type TipeFilter = 'semua' | 'LM' | 'BR';
+
+interface TxFinancials {
+  omzetLunas: number;
+  labaHL: number;
+  terbayar: number;
+  piutang: number;
+}
+
+function calcLineTotals(
+  lines: Bon['lines'] | undefined,
+  tipe: TipeFilter
+): { omzet: number; laba: number } {
+  let omzet = 0;
+  let laba = 0;
+  for (const l of lines ?? []) {
+    const lineTipe = l.tipe ?? l.tipe_snapshot;
+    if (tipe !== 'semua' && lineTipe !== tipe) continue;
+    const lineOmzet = l.harga_final * l.qty;
+    omzet += lineOmzet;
+    laba += (l.harga_final - (l.harga_modal_snapshot ?? 0)) * l.qty;
+  }
+  return { omzet, laba };
+}
+
+function calcTxFinancials(t: Bon, tipe: TipeFilter): TxFinancials {
+  if (t.is_bonus || t.status === 'Cancelled') {
+    return { omzetLunas: 0, labaHL: 0, terbayar: 0, piutang: 0 };
+  }
+
+  const { omzet, laba } = calcLineTotals(t.lines, tipe);
+
+  if (t.status === 'Lunas') {
+    const terbayar = tipe === 'semua' ? t.omzet + t.ongkir : omzet;
+    return { omzetLunas: omzet, labaHL: laba, terbayar, piutang: 0 };
+  }
+
+  if (t.status === 'Open') {
+    const piutang = tipe === 'semua' ? t.omzet + t.ongkir : omzet;
+    return { omzetLunas: 0, labaHL: 0, terbayar: 0, piutang };
+  }
+
+  return { omzetLunas: 0, labaHL: 0, terbayar: 0, piutang: 0 };
+}
+
+function aggregateFinancials(transactions: Bon[], tipe: TipeFilter): TxFinancials {
+  return transactions.reduce<TxFinancials>(
+    (acc, t) => {
+      if (t.is_bonus) return acc;
+      const f = calcTxFinancials(t, tipe);
+      return {
+        omzetLunas: acc.omzetLunas + f.omzetLunas,
+        labaHL: acc.labaHL + f.labaHL,
+        terbayar: acc.terbayar + f.terbayar,
+        piutang: acc.piutang + f.piutang,
+      };
+    },
+    { omzetLunas: 0, labaHL: 0, terbayar: 0, piutang: 0 }
+  );
+}
 
 export default function LaporanPage() {
-  const { transactions, customers } = useStore();
+  const { transactions: rawTransactions, customers: rawCustomers } = useStore();
+  const transactions = rawTransactions ?? [];
+  const customers = rawCustomers ?? [];
 
-  // State Filter Bulan & Tahun (Default ke November 2024 sesuai mockup user)
-  const [selectedMonth, setSelectedMonth] = useState<number | 'semua'>(11);
-  const [selectedYear, setSelectedYear] = useState<number | 'semua'>(2024);
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonthNum = today.getMonth() + 1;
+
+  const [selectedMonth, setSelectedMonth] = useState<number | 'semua'>(currentMonthNum);
+  const [selectedYear, setSelectedYear] = useState<number | 'semua'>(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeReportTab, setActiveReportTab] = useState<'semua' | 'LM' | 'BR' | 'bonus'>('semua');
+  const [activeReportTab, setActiveReportTab] = useState<ReportTab>('semua');
   
   // State untuk Detail Modal Pelanggan
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
@@ -36,10 +102,10 @@ export default function LaporanPage() {
     { value: 12, label: 'Desember' }
   ];
 
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonthNum = today.getMonth() + 1;
-  const yearsList = Array.from({ length: currentYear - 2024 + 1 }, (_, i) => 2024 + i);
+  const yearsList = Array.from(
+    { length: Math.max(1, currentYear - 2024 + 1) },
+    (_, i) => 2024 + i
+  );
 
   const handleYearChange = (year: number | 'semua') => {
     setSelectedYear(year);
@@ -62,6 +128,7 @@ export default function LaporanPage() {
   // Filter transaksi berdasarkan bulan/tahun terpilih (Mendukung opsi "Semua")
   const monthTransactions = useMemo(() => {
     return transactions.filter(t => {
+      if (!t?.tanggal) return false;
       const parts = t.tanggal.split('-');
       const txYear = parseInt(parts[0], 10);
       const txMonth = parseInt(parts[1], 10);
@@ -78,86 +145,44 @@ export default function LaporanPage() {
     return monthTransactions.filter(t => t.is_bonus);
   }, [monthTransactions]);
 
-  // --- LOGIKA KALKULASI KPI UTAMA ---
-  
   const metrics = useMemo(() => {
-    let omzetLunas = 0;
-    let labaHL = 0;
-    let sudahDibayar = 0; // Piutang Masuk
-    let sisaPiutang = 0;   // Sisa Piutang
-
-    if (activeReportTab === 'semua') {
-      monthTransactions.forEach(t => {
-        if (t.is_bonus) return;
-        
-        if (t.status === 'Lunas') {
-          omzetLunas += t.omzet;
-          sudahDibayar += (t.omzet + t.ongkir);
-          t.lines.forEach(l => {
-            const modal = l.harga_modal_snapshot ?? 0;
-            labaHL += (l.harga_final - modal) * l.qty;
-          });
-        } else if (t.status === 'Open') {
-          sisaPiutang += (t.omzet + t.ongkir);
-        }
-      });
-    } else if (activeReportTab === 'LM' || activeReportTab === 'BR') {
-      const type = activeReportTab;
-
-      monthTransactions.forEach(t => {
-        if (t.is_bonus) return;
-
-        let txOmzetTipe = 0;
-        let txLabaTipe = 0;
-
-        t.lines.forEach(l => {
-          if (l.tipe === type) {
-            const lineOmzet = l.harga_final * l.qty;
-            txOmzetTipe += lineOmzet;
-
-            const modal = l.harga_modal_snapshot ?? 0;
-            txLabaTipe += (l.harga_final - modal) * l.qty;
-          }
-        });
-
-        if (t.status === 'Lunas') {
-          omzetLunas += txOmzetTipe;
-          labaHL += txLabaTipe;
-          sudahDibayar += txOmzetTipe;
-        } else if (t.status === 'Open') {
-          sisaPiutang += txOmzetTipe;
-        }
-      });
-    } else {
+    if (activeReportTab === 'bonus') {
       let totalKlaim = 0;
       let totalUnit = 0;
       let totalSubsidi = 0;
+      const pelangganKlaim = new Set<string>();
 
       bonusTransactions.forEach(t => {
-        totalKlaim += (t.bonus_count ?? 1);
-        t.lines.forEach(l => {
-          totalUnit += l.qty;
-          totalSubsidi += (l.harga_base * l.qty);
+        totalKlaim += t.bonus_count ?? 1;
+        pelangganKlaim.add(t.customer_id);
+        (t.lines ?? []).forEach(l => {
+          totalUnit += l.qty ?? 0;
+          totalSubsidi += (l.harga_base ?? 0) * (l.qty ?? 0);
         });
       });
 
       return {
         omzetLunas: 0,
         labaHL: 0,
-        sudahDibayar: totalKlaim,
-        sisaPiutang: totalUnit,
-        totalSubsidi
+        terbayar: totalKlaim,
+        piutang: totalUnit,
+        totalSubsidi,
+        pelangganKlaim: pelangganKlaim.size,
       };
     }
 
-    return {
-      omzetLunas,
-      labaHL,
-      sudahDibayar,
-      sisaPiutang,
-      totalSubsidi: 0
-    };
+    const tipe: TipeFilter = activeReportTab;
+    const agg = aggregateFinancials(monthTransactions, tipe);
+    return { ...agg, totalSubsidi: 0, pelangganKlaim: 0 };
   }, [monthTransactions, bonusTransactions, activeReportTab]);
+
+  const typeBreakdown = useMemo(() => {
+    if (activeReportTab !== 'semua') return null;
+    return {
+      LM: aggregateFinancials(monthTransactions, 'LM'),
+      BR: aggregateFinancials(monthTransactions, 'BR'),
+    };
+  }, [monthTransactions, activeReportTab]);
 
   // --- TABEL RINCIAN PERFORMA PELANGGAN ---
   
@@ -167,64 +192,69 @@ export default function LaporanPage() {
       return c.deleted_at === null || hasTx;
     });
 
-    const list = activeAndTransacting.map(c => {
+    const list = activeAndTransacting.flatMap(c => {
+      if (!c?.id) return [];
       const cTxs = monthTransactions.filter(t => t.customer_id === c.id);
-      
-      let totalTransaksi = 0;
-      let omzet = 0;
-      let statusTerakhir: 'LUNAS' | 'PIUTANG' | 'BATAL' | '—' = '—';
 
       if (activeReportTab === 'bonus') {
         const cBonusTxs = cTxs.filter(t => t.is_bonus);
-        totalTransaksi = cBonusTxs.length;
+        let unitBonus = 0;
+        let subsidi = 0;
         cBonusTxs.forEach(t => {
-          t.lines.forEach(l => {
-            omzet += l.qty;
+          (t.lines ?? []).forEach(l => {
+            unitBonus += l.qty ?? 0;
+            subsidi += (l.harga_base ?? 0) * (l.qty ?? 0);
           });
         });
-        if (cBonusTxs.length > 0) {
-          statusTerakhir = 'LUNAS';
-        }
-      } else {
-        const cRegularTxs = cTxs.filter(t => !t.is_bonus);
-        totalTransaksi = cRegularTxs.length;
-
-        if (cRegularTxs.length > 0) {
-          const sorted = [...cRegularTxs].sort((a, b) => b.tanggal.localeCompare(a.tanggal));
-          const latest = sorted[0];
-          statusTerakhir = latest.status === 'Lunas' ? 'LUNAS' : latest.status === 'Open' ? 'PIUTANG' : 'BATAL';
-        }
-
-        cRegularTxs.forEach(t => {
-          if (t.status !== 'Lunas') return;
-          
-          if (activeReportTab === 'semua') {
-            omzet += t.omzet;
-          } else {
-            t.lines.forEach(l => {
-              if (l.tipe === activeReportTab) {
-                omzet += (l.harga_final * l.qty);
-              }
-            });
-          }
-        });
+        return [{
+          customer: c,
+          totalTransaksi: cBonusTxs.length,
+          omzetLunas: 0,
+          labaHL: 0,
+          piutang: 0,
+          terbayar: 0,
+          unitBonus,
+          subsidi,
+        }];
       }
 
-      return {
+      const cRegularTxs = cTxs.filter(t => !t.is_bonus && t.status !== 'Cancelled');
+      const tipe: TipeFilter = activeReportTab;
+      const totals = cRegularTxs.reduce(
+        (acc, t) => {
+          const f = calcTxFinancials(t, tipe);
+          return {
+            omzetLunas: acc.omzetLunas + f.omzetLunas,
+            labaHL: acc.labaHL + f.labaHL,
+            piutang: acc.piutang + f.piutang,
+            terbayar: acc.terbayar + f.terbayar,
+          };
+        },
+        { omzetLunas: 0, labaHL: 0, piutang: 0, terbayar: 0 }
+      );
+
+      return [{
         customer: c,
-        totalTransaksi,
-        omzet,
-        statusTerakhir
-      };
+        totalTransaksi: cRegularTxs.length,
+        ...totals,
+        unitBonus: 0,
+        subsidi: 0,
+      }];
     });
 
-    return list.filter(row => {
-      const matchesSearch = row.customer.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            row.customer.kode.toLowerCase().includes(searchQuery.toLowerCase());
-      
+    const filtered = list.filter(row => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        (row.customer?.nama ?? '').toLowerCase().includes(q) ||
+        (row.customer?.kode ?? '').toLowerCase().includes(q);
       if (searchQuery) return matchesSearch;
       return row.totalTransaksi > 0;
     });
+
+    if (activeReportTab === 'bonus') {
+      return filtered.sort((a, b) => b.unitBonus - a.unitBonus);
+    }
+    return filtered.sort((a, b) => b.labaHL - a.labaHL || b.omzetLunas - a.omzetLunas);
   }, [customers, monthTransactions, activeReportTab, searchQuery]);
 
   // Pagination Logic
@@ -247,7 +277,8 @@ export default function LaporanPage() {
 
   // --- REAL PDF EXPORT (jsPDF) per PRD AC-7.8 - proper layout ---
   
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     let y = 15;
@@ -279,34 +310,67 @@ export default function LaporanPage() {
     doc.rect(15, y - 3, pageWidth - 30, 10, 'F');
     doc.setFontSize(8);
     if (activeReportTab === 'bonus') {
-      doc.text(`Klaim: ${metrics.sudahDibayar} | Unit: ${metrics.sisaPiutang} | Nilai: ${formatRp(metrics.totalSubsidi)} | Status: LUNAS`, 20, y + 3);
+      doc.text(
+        `Klaim: ${metrics.terbayar} | Unit: ${metrics.piutang} | Subsidi: ${formatRp(metrics.totalSubsidi)} | Pelanggan: ${metrics.pelangganKlaim}`,
+        20,
+        y + 3
+      );
     } else {
-      doc.text(`Omzet: ${formatRp(metrics.omzetLunas)} | Laba: ${formatRp(metrics.labaHL)} | Terbayar: ${formatRp(metrics.sudahDibayar)} | Piutang: ${formatRp(metrics.sisaPiutang)}`, 20, y + 3);
+      doc.text(
+        `Omzet Lunas: ${formatRp(metrics.omzetLunas)} | Laba HL: ${formatRp(metrics.labaHL)} | Sudah Dibayar: ${formatRp(metrics.terbayar)} | Piutang: ${formatRp(metrics.piutang)}`,
+        20,
+        y + 3
+      );
     }
     y += 12;
 
-    // Table
+    if (typeBreakdown) {
+      doc.setFontSize(7);
+      doc.text(
+        `LM — Omzet: ${formatRp(typeBreakdown.LM.omzetLunas)} | Laba: ${formatRp(typeBreakdown.LM.labaHL)} | Piutang: ${formatRp(typeBreakdown.LM.piutang)}`,
+        20,
+        y
+      );
+      y += 4;
+      doc.text(
+        `BR — Omzet: ${formatRp(typeBreakdown.BR.omzetLunas)} | Laba: ${formatRp(typeBreakdown.BR.labaHL)} | Piutang: ${formatRp(typeBreakdown.BR.piutang)}`,
+        20,
+        y
+      );
+      y += 8;
+    }
+
     doc.setFontSize(7);
     doc.setFillColor(240, 244, 249);
     doc.rect(15, y - 4, pageWidth - 30, 6, 'F');
     doc.text('NO', 17, y);
-    doc.text('PELANGGAN (KODE)', 30, y);
-    doc.text('TRX', 95, y);
-    const valHeader = activeReportTab === 'bonus' ? 'UNIT BONUS' : 'OMZET LUNAS';
-    doc.text(valHeader, 115, y);
-    doc.text('STATUS', 165, y);
+    doc.text('PELANGGAN', 28, y);
+    doc.text('TRX', 78, y);
+    if (activeReportTab === 'bonus') {
+      doc.text('UNIT', 95, y);
+      doc.text('SUBSIDI', 130, y);
+    } else {
+      doc.text('OMZET', 90, y);
+      doc.text('LABA', 118, y);
+      doc.text('PIUTANG', 145, y);
+    }
     y += 5;
     doc.setDrawColor(200);
     doc.line(15, y, pageWidth - 15, y);
     y += 4;
 
     customerPerformance.slice(0, 28).forEach((row, idx) => {
-      const val = activeReportTab === 'bonus' ? `${row.omzet} Unit` : formatRp(row.omzet);
       doc.text(String(idx + 1), 17, y);
-      doc.text(`${row.customer.nama} (${row.customer.kode})`.substring(0, 32), 30, y);
-      doc.text(`${row.totalTransaksi}x`, 95, y);
-      doc.text(val, 115, y);
-      doc.text(row.statusTerakhir, 165, y);
+      doc.text(`${row.customer.nama} (${row.customer.kode})`.substring(0, 28), 28, y);
+      doc.text(`${row.totalTransaksi}x`, 78, y);
+      if (activeReportTab === 'bonus') {
+        doc.text(`${row.unitBonus}`, 95, y);
+        doc.text(formatRp(row.subsidi), 130, y);
+      } else {
+        doc.text(formatRp(row.omzetLunas), 90, y);
+        doc.text(formatRp(row.labaHL), 118, y);
+        doc.text(formatRp(row.piutang), 145, y);
+      }
       y += 4.5;
       if (y > 265) { doc.addPage(); y = 20; }
     });
@@ -377,8 +441,8 @@ export default function LaporanPage() {
                       let omzBR = 0;
                       let laba = 0;
 
-                      t.lines.forEach(l => {
-                        const lineOmzet = l.harga_final * l.qty;
+                      (t.lines ?? []).forEach(l => {
+                        const lineOmzet = (l.harga_final ?? 0) * (l.qty ?? 0);
                         if (l.tipe === 'LM') omzLM += lineOmzet;
                         else if (l.tipe === 'BR') omzBR += lineOmzet;
 
@@ -458,7 +522,7 @@ export default function LaporanPage() {
       <div className="border-b-2 border-slate-200 pb-6">
         <h1 className="text-4xl font-black text-slate-900 tracking-tight">HL Laporan</h1>
         <p className="text-slate-600 text-lg font-bold mt-1.5 leading-relaxed">
-          Analisis detail performa penjualan, laba, piutang, dan pencairan bonus pelanggan.
+          Rekap omzet, laba, piutang, dan pembayaran per periode — sesuai AC-7.
         </p>
       </div>
 
@@ -585,7 +649,7 @@ export default function LaporanPage() {
                   Total Klaim
                 </p>
                 <p className="text-3xl font-black text-amber-950 tracking-tight mt-0.5">
-                  {metrics.sudahDibayar} Kali
+                  {metrics.terbayar} Kali
                 </p>
               </div>
             </div>
@@ -602,7 +666,7 @@ export default function LaporanPage() {
                   Total Unit Barang
                 </p>
                 <p className="text-3xl font-black text-blue-955 tracking-tight mt-0.5">
-                  {metrics.sisaPiutang} Unit
+                  {metrics.piutang} Unit
                 </p>
               </div>
             </div>
@@ -624,19 +688,19 @@ export default function LaporanPage() {
               </div>
             </div>
 
-            {/* Status Kelayakan */}
-            <div className="bg-emerald-50/60 border-2 border-emerald-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 border-l-[8px] border-l-emerald-600">
+            {/* Pelanggan Klaim */}
+            <div className="bg-slate-50/80 border-2 border-slate-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-slate-500 transition-colors">
               <div className="flex items-start justify-between">
-                <span className="bg-emerald-200 text-emerald-955 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-                  Sistem
+                <span className="bg-slate-200 text-slate-800 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
+                  Pelanggan
                 </span>
               </div>
               <div className="mt-3">
-                <p className="text-sm font-black text-emerald-800/70 uppercase tracking-wide">
-                  Status Kelayakan
+                <p className="text-sm font-black text-slate-600 uppercase tracking-wide">
+                  Pelanggan Klaim Bonus
                 </p>
-                <p className="text-[21px] font-black text-emerald-900 tracking-tight mt-1">
-                  100% Lunas Otomatis
+                <p className="text-3xl font-black text-slate-900 tracking-tight mt-0.5">
+                  {metrics.pelangganKlaim} Orang
                 </p>
               </div>
             </div>
@@ -677,7 +741,7 @@ export default function LaporanPage() {
               </div>
             </div>
 
-            {/* Piutang Masuk (Total Terbayar) */}
+            {/* Sudah Dibayar */}
             <div className="bg-indigo-50/60 border-2 border-indigo-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-indigo-600 transition-colors">
               <div className="flex items-start justify-between">
                 <span className="bg-indigo-200 text-indigo-955 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider font-sans">
@@ -686,33 +750,74 @@ export default function LaporanPage() {
               </div>
               <div className="mt-3">
                 <p className="text-sm font-black text-indigo-800/70 uppercase tracking-wide">
-                  Piutang Masuk {activeReportTab !== 'semua' && `(${activeReportTab})`}
+                  Sudah Dibayar {activeReportTab !== 'semua' && `(${activeReportTab})`}
                 </p>
                 <p className="text-[26px] font-black text-indigo-955 tracking-tight mt-0.5">
-                  {formatRp(metrics.sudahDibayar)}
+                  {formatRp(metrics.terbayar)}
                 </p>
               </div>
             </div>
 
-            {/* Sisa Piutang */}
+            {/* Piutang */}
             <div className="bg-amber-50/65 border-2 border-amber-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-amber-600 transition-colors">
               <div className="flex items-start justify-between">
                 <span className="bg-amber-200 text-amber-850 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-                  Belum Lunas
+                  Outstanding
                 </span>
               </div>
               <div className="mt-3">
                 <p className="text-sm font-black text-amber-850/70 uppercase tracking-wide">
-                  Sisa Piutang {activeReportTab !== 'semua' && `(${activeReportTab})`}
+                  Piutang {activeReportTab !== 'semua' && `(${activeReportTab})`}
                 </p>
                 <p className="text-[26px] font-black text-amber-900 tracking-tight mt-0.5">
-                  {formatRp(metrics.sisaPiutang)}
+                  {formatRp(metrics.piutang)}
                 </p>
               </div>
             </div>
           </>
         )}
       </div>
+
+      {typeBreakdown && (
+        <div className="bg-white border-2 border-slate-300 rounded-3xl p-6 md:p-8 shadow-sm space-y-4">
+          <h3 className="text-lg font-black text-slate-900">Pemisahan LM vs BR (Keseluruhan)</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            {(['LM', 'BR'] as const).map((tipe) => {
+              const d = typeBreakdown[tipe];
+              return (
+                <div
+                  key={tipe}
+                  className={`rounded-2xl border-2 p-5 ${
+                    tipe === 'LM' ? 'border-blue-200 bg-blue-50/40' : 'border-violet-200 bg-violet-50/40'
+                  }`}
+                >
+                  <p className="text-sm font-black text-slate-600 uppercase tracking-wider mb-3">
+                    Tipe {tipe}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 text-base font-bold text-slate-800">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Omzet Lunas</p>
+                      <p className="font-black text-slate-900">{formatRp(d.omzetLunas)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Laba HL</p>
+                      <p className="font-black text-emerald-800">{formatRp(d.labaHL)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Sudah Dibayar</p>
+                      <p className="font-black text-indigo-900">{formatRp(d.terbayar)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Piutang</p>
+                      <p className="font-black text-amber-900">{formatRp(d.piutang)}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* RINCIAN PERFORMA PELANGGAN CARD */}
       <div className="bg-white border-2 border-slate-300 rounded-3xl p-6 md:p-8 shadow-xs">
@@ -726,8 +831,8 @@ export default function LaporanPage() {
             </h2>
             <p className="text-base font-semibold text-slate-500 mt-1">
               {activeReportTab === 'bonus'
-                ? 'Daftar pelanggan yang mencairkan bonus gratis beserta total unit produk bonus.'
-                : `Omzet penjualan ${activeReportTab === 'semua' ? 'LM & BR' : activeReportTab} yang berstatus lunas.`
+                ? 'Daftar pelanggan yang mencairkan bonus — diurutkan berdasarkan unit bonus terbanyak.'
+                : `Rekap per pelanggan — diurutkan berdasarkan laba HL ${activeReportTab === 'semua' ? '(LM & BR)' : `(${activeReportTab})`}.`
               }
             </p>
           </div>
@@ -746,74 +851,79 @@ export default function LaporanPage() {
         <div className="overflow-hidden border-2 border-slate-200 rounded-2xl shadow-2xs">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left">
-              <thead className="bg-[#f0f4f9] border-b-2 border-slate-200 text-base font-black text-slate-700">
+              <thead className="bg-[#f0f4f9] border-b-2 border-slate-200 text-sm font-black text-slate-700">
                 <tr>
-                  <th className="py-5 px-6 uppercase tracking-wider">Nama Pelanggan</th>
-                  <th className="py-5 px-6 uppercase tracking-wider text-center" style={{ width: '220px' }}>Jumlah Transaksi</th>
-                  <th className="py-5 px-6 uppercase tracking-wider" style={{ width: '250px' }}>
-                    {activeReportTab === 'bonus' ? 'Unit Bonus' : 'Omzet (IDR)'}
-                  </th>
-                  <th className="py-5 px-6 uppercase tracking-wider text-center" style={{ width: '200px' }}>Status Terakhir</th>
-                  <th className="py-5 px-6 uppercase tracking-wider text-center" style={{ width: '150px' }}>Aksi</th>
+                  <th className="py-4 px-4 uppercase tracking-wider">Pelanggan</th>
+                  <th className="py-4 px-3 uppercase tracking-wider text-center">Bon</th>
+                  {activeReportTab === 'bonus' ? (
+                    <>
+                      <th className="py-4 px-3 uppercase tracking-wider text-right">Unit Bonus</th>
+                      <th className="py-4 px-3 uppercase tracking-wider text-right">Subsidi</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="py-4 px-3 uppercase tracking-wider text-right">Omzet Lunas</th>
+                      <th className="py-4 px-3 uppercase tracking-wider text-right">Laba HL</th>
+                      <th className="py-4 px-3 uppercase tracking-wider text-right">Piutang</th>
+                      <th className="py-4 px-3 uppercase tracking-wider text-right">Sudah Dibayar</th>
+                    </>
+                  )}
+                  <th className="py-4 px-3 uppercase tracking-wider text-center">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 text-lg">
+              <tbody className="divide-y divide-slate-200 text-base">
                 {paginatedCustomers.length > 0 ? (
-                  paginatedCustomers.map((row) => {
-                    return (
-                      <tr key={row.customer.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-6 px-6">
-                          <div>
-                            <div className="font-black text-slate-900 text-xl leading-tight">
-                              {row.customer.nama}
-                            </div>
-                            <div className="text-slate-500 font-mono text-sm font-bold mt-1.5 uppercase tracking-wider">
-                              ID: {row.customer.kode}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-6 px-6 text-center font-black text-slate-800 text-xl">
-                          {row.totalTransaksi} Kali
-                        </td>
-                        <td className="py-6 px-6 font-black text-slate-900 text-2xl">
-                          {activeReportTab === 'bonus' ? `${row.omzet} Unit` : formatRp(row.omzet)}
-                        </td>
-                        <td className="py-6 px-6 text-center">
-                          <div className="flex justify-center">
-                            {row.statusTerakhir === 'LUNAS' ? (
-                              <span className="inline-flex items-center px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-2xl text-base font-black border-2 border-emerald-200 uppercase tracking-wider shadow-2xs">
-                                Lunas
-                              </span>
-                            ) : row.statusTerakhir === 'PIUTANG' ? (
-                              <span className="inline-flex items-center px-5 py-2.5 bg-amber-50 text-amber-700 rounded-2xl text-base font-black border-2 border-amber-200 uppercase tracking-wider shadow-2xs">
-                                Piutang
-                              </span>
-                            ) : row.statusTerakhir === 'BATAL' ? (
-                              <span className="inline-flex items-center px-5 py-2.5 bg-rose-50 text-rose-700 rounded-2xl text-base font-black border-2 border-rose-200 uppercase tracking-wider shadow-2xs">
-                                Batal
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 font-bold">—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-6 px-6">
-                          <div className="flex items-center justify-center">
-                            <button
-                              onClick={() => setDetailCustomer(row.customer)}
-                              className="px-8 py-3 bg-white border-2 border-slate-350 hover:bg-slate-50 text-slate-800 font-black text-base rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
-                              style={{ minHeight: '46px' }}
-                            >
-                              Detail
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  paginatedCustomers.map((row) => (
+                    <tr key={row.customer.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-4 px-4">
+                        <div className="font-black text-slate-900 text-lg leading-tight">
+                          {row.customer.nama}
+                        </div>
+                        <div className="text-slate-500 font-mono text-xs font-bold mt-1 uppercase tracking-wider">
+                          {row.customer.kode}
+                        </div>
+                      </td>
+                      <td className="py-4 px-3 text-center font-black text-slate-800">
+                        {row.totalTransaksi}
+                      </td>
+                      {activeReportTab === 'bonus' ? (
+                        <>
+                          <td className="py-4 px-3 text-right font-black text-slate-900">
+                            {row.unitBonus} Unit
+                          </td>
+                          <td className="py-4 px-3 text-right font-black text-emerald-800">
+                            {formatRp(row.subsidi)}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-4 px-3 text-right font-black text-[#002B8F]">
+                            {formatRp(row.omzetLunas)}
+                          </td>
+                          <td className="py-4 px-3 text-right font-black text-emerald-800">
+                            {formatRp(row.labaHL)}
+                          </td>
+                          <td className="py-4 px-3 text-right font-black text-amber-800">
+                            {row.piutang > 0 ? formatRp(row.piutang) : '—'}
+                          </td>
+                          <td className="py-4 px-3 text-right font-black text-indigo-900">
+                            {formatRp(row.terbayar)}
+                          </td>
+                        </>
+                      )}
+                      <td className="py-4 px-3 text-center">
+                        <button
+                          onClick={() => setDetailCustomer(row.customer)}
+                          className="px-5 py-2 bg-white border-2 border-slate-300 hover:bg-slate-50 text-slate-800 font-black text-sm rounded-xl transition-all cursor-pointer active:scale-95"
+                        >
+                          Detail
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-20 text-center text-slate-500 font-black text-xl">
+                    <td colSpan={activeReportTab === 'bonus' ? 5 : 7} className="py-20 text-center text-slate-500 font-black text-xl">
                       Tidak ada data performa pelanggan untuk kriteria filter ini.
                     </td>
                   </tr>
@@ -838,20 +948,28 @@ export default function LaporanPage() {
               >
                 <span>&lt;</span>
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  className={`w-12 h-12 font-black rounded-xl flex items-center justify-center cursor-pointer transition-all text-base ${
-                    page === currentPage 
-                      ? 'bg-[#002B8F] text-white shadow-md' 
-                      : 'border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                  style={{ minHeight: '48px' }}
-                >
-                  {page}
-                </button>
-              ))}
+              {(() => {
+                const pages: number[] = [];
+                const maxButtons = 7;
+                let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                const end = Math.min(totalPages, start + maxButtons - 1);
+                start = Math.max(1, end - maxButtons + 1);
+                for (let p = start; p <= end; p++) pages.push(p);
+                return pages.map(page => (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`w-12 h-12 font-black rounded-xl flex items-center justify-center cursor-pointer transition-all text-base ${
+                      page === currentPage
+                        ? 'bg-[#002B8F] text-white shadow-md'
+                        : 'border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    style={{ minHeight: '48px' }}
+                  >
+                    {page}
+                  </button>
+                ));
+              })()}
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => handlePageChange(currentPage + 1)}
