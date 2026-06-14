@@ -28,7 +28,7 @@ function KpiAmount({ value, tone }: { value: number; tone: 'blue' | 'emerald' | 
 
   return (
     <div className={`font-extrabold tracking-tight leading-none mt-1 min-w-0 ${toneClass}`}>
-      <div className="text-slate-400 font-bold text-[11px] mb-1">Rp</div>
+      <div className={`text-lg font-black mb-1.5 ${toneClass}`}>Rp</div>
       <div className="text-[clamp(1.1rem,3.2vw,1.65rem)] break-all">{formatAmount(value)}</div>
     </div>
   );
