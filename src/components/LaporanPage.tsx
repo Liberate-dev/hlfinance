@@ -403,7 +403,7 @@ export default function LaporanPage() {
 
         {/* INFO UTAMA PELANGGAN */}
         <div className="bg-white border-2 border-slate-300 rounded-3xl p-6 md:p-8 shadow-sm">
-          <p className="text-xs font-black text-[#002B8F] uppercase tracking-wider font-mono">RINCIAN DATA TRANSAKSI</p>
+          <p className="text-sm font-black text-[#002B8F] uppercase tracking-wide font-mono">RINCIAN DATA TRANSAKSI</p>
           <h2 className="text-3xl font-black text-slate-900 leading-tight mt-1">
             {detailCustomer.nama}
           </h2>
@@ -796,19 +796,19 @@ export default function LaporanPage() {
                   </p>
                   <div className="grid grid-cols-2 gap-3 text-base font-bold text-slate-800">
                     <div>
-                      <p className="text-xs text-slate-500 uppercase">Omzet Lunas</p>
+                      <p className="text-sm text-slate-600 uppercase">Omzet Lunas</p>
                       <p className="font-black text-slate-900">{formatRp(d.omzetLunas)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 uppercase">Laba HL</p>
+                      <p className="text-sm text-slate-600 uppercase">Laba HL</p>
                       <p className="font-black text-emerald-800">{formatRp(d.labaHL)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 uppercase">Sudah Dibayar</p>
+                      <p className="text-sm text-slate-600 uppercase">Sudah Dibayar</p>
                       <p className="font-black text-indigo-900">{formatRp(d.terbayar)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 uppercase">Piutang</p>
+                      <p className="text-sm text-slate-600 uppercase">Piutang</p>
                       <p className="font-black text-amber-900">{formatRp(d.piutang)}</p>
                     </div>
                   </div>

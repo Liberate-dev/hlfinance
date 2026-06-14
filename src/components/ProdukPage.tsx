@@ -305,7 +305,7 @@ export default function ProdukPage() {
                 <div className="flex items-center gap-3 p-3.5 bg-blue-50 border border-blue-100 rounded-xl">
                   <Wand2 size={24} className="text-blue-600 shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-blue-500 uppercase tracking-wide">Kode Otomatis</p>
+                    <p className="text-sm font-bold text-blue-600 uppercase tracking-wide">Kode Otomatis</p>
                     <p className="text-xl font-bold text-[#002B8F] font-mono leading-none mt-0.5">{autoKode}</p>
                   </div>
                 </div>
@@ -321,7 +321,7 @@ export default function ProdukPage() {
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-base font-semibold text-slate-900 focus:outline-none focus:border-[#002B8F] focus:ring-2 focus:ring-[#002B8F]/10 focus:bg-white transition-all shadow-sm font-mono"
                     style={{ minHeight: '48px' }}
                   />
-                  <div className="flex justify-between items-center text-xs text-slate-400 font-medium px-1">
+                  <div className="flex justify-between items-center text-sm text-slate-500 font-medium px-1">
                     <span>Maksimal 10 karakter (huruf & angka)</span>
                     <span>{formKodeManual.length}/10</span>
                   </div>
@@ -368,7 +368,7 @@ export default function ProdukPage() {
             {/* Harga Modal */}
             <div className="space-y-2">
               <label htmlFor="prod-modal" className="block text-base font-bold text-slate-700">
-                Harga Modal / Biaya Beli (Rp) <span className="text-xs text-amber-600 font-semibold">(Rahasia)</span>
+                Harga Modal / Biaya Beli (Rp) <span className="text-sm text-amber-600 font-semibold">(Rahasia)</span>
               </label>
               <input
                 id="prod-modal"

@@ -24,7 +24,7 @@ export default function DashboardLayout({
   ];
 
   return (
-    <div className="min-h-screen flex bg-slate-50 font-sans antialiased text-slate-800 select-none">
+    <div className="min-h-screen flex bg-slate-50 font-sans antialiased text-slate-800">
       {/* Sidebar Navigasi Kiri */}
       <aside className="w-72 h-screen bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 sticky top-0">
         {/* Header Sidebar */}

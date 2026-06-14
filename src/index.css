@@ -19,6 +19,14 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
+  font-size: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-fade-in {
+    animation: none !important;
+  }
 }
 
 h1, h2, h3, h4, h5, h6 {

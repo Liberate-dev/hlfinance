@@ -798,7 +798,7 @@ export default function PelangganPage() {
           <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-8 shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-slate-100 pb-6">
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nomor Bon</p>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Nomor Bon</p>
                 <h2 className="text-3xl font-black text-[#002B8F] tracking-tight mt-1">
                   {activeBonDetail.nomor_bon}
                 </h2>
@@ -810,14 +810,14 @@ export default function PelangganPage() {
 
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tanggal Transaksi</p>
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Tanggal Transaksi</p>
                 <p className="font-extrabold text-slate-800 text-xl mt-1.5">
                   {new Date(activeBonDetail.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
                 </p>
               </div>
               {activeBonDetail.tanggal_lunas && (
                 <div className="bg-emerald-50/50 border border-emerald-200 p-6 rounded-2xl">
-                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Tanggal Pelunasan</p>
+                  <p className="text-sm font-bold text-emerald-600 uppercase tracking-wide">Tanggal Pelunasan</p>
                   <p className="font-extrabold text-emerald-800 text-xl mt-1.5">
                     {new Date(activeBonDetail.tanggal_lunas).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
                   </p>
@@ -883,7 +883,7 @@ export default function PelangganPage() {
                   <span className="text-slate-800">Rp {activeBonDetail.ongkir.toLocaleString('id-ID')}</span>
                 </div>
                 <div className="border-t-2 border-dashed border-slate-200 pt-4 flex flex-col space-y-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Tagihan Akhir</span>
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Total Tagihan Akhir</span>
                   <span className="text-3xl font-black text-[#002B8F] tracking-tight">
                     Rp {(activeBonDetail.omzet + activeBonDetail.ongkir).toLocaleString('id-ID')}
                   </span>
@@ -1258,7 +1258,7 @@ export default function PelangganPage() {
               
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                 <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Diskon LM (Cascading)</p>
+                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Diskon LM (Cascading)</p>
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {activeCustomer?.diskon_lm.map((d, i) => (
                       <span key={i} className="bg-blue-50 text-[#002B8F] text-xs font-extrabold px-2 py-0.5 rounded border border-blue-100/50">
@@ -1268,7 +1268,7 @@ export default function PelangganPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Diskon BR (Cascading)</p>
+                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Diskon BR (Cascading)</p>
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {activeCustomer?.diskon_br.map((d, i) => (
                       <span key={i} className="bg-emerald-50 text-emerald-800 text-xs font-extrabold px-2 py-0.5 rounded border border-emerald-100/50">
@@ -1288,7 +1288,7 @@ export default function PelangganPage() {
                   : 'bg-white border-slate-200/60'
               }`}>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status Jatah Bonus</span>
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Status Jatah Bonus</span>
                   <Award size={20} className={isEligibleForBonus(activeCustomer) ? 'text-amber-600' : 'text-slate-300'} />
                 </div>
                 <div className="my-3">
@@ -1530,7 +1530,7 @@ export default function PelangganPage() {
             </p>
 
             <div className="space-y-2">
-              <label htmlFor="settle-date" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <label htmlFor="settle-date" className="block text-sm font-bold text-slate-500 uppercase tracking-wide">
                 Tanggal Pelunasan
               </label>
               <input

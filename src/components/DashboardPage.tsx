@@ -64,7 +64,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             <div className="p-3 bg-blue-50 text-[#002B8F] rounded-xl">
               <Wallet size={24} />
             </div>
-            <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            <span className="bg-amber-100 text-amber-800 text-sm font-bold px-3 py-1 rounded-full uppercase tracking-wide">
               Piutang
             </span>
           </div>
@@ -84,7 +84,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
               <TrendingUp size={24} />
             </div>
-            <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            <span className="bg-emerald-100 text-emerald-800 text-sm font-bold px-3 py-1 rounded-full uppercase tracking-wide">
               Lunas (Omzet)
             </span>
           </div>
@@ -104,7 +104,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
               <PiggyBank size={24} />
             </div>
-            <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            <span className="bg-emerald-100 text-emerald-800 text-sm font-bold px-3 py-1 rounded-full uppercase tracking-wide">
               Lunas (Laba)
             </span>
           </div>
@@ -124,7 +124,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             <div className="p-3 bg-slate-100 text-slate-600 rounded-xl">
               <Users size={24} />
             </div>
-            <span className="bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            <span className="bg-slate-100 text-slate-700 text-sm font-bold px-3 py-1 rounded-full uppercase tracking-wide">
               Aktif
             </span>
           </div>

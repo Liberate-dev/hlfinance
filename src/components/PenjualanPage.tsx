@@ -518,7 +518,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
         <div className="border-t border-slate-100 pt-4 flex flex-wrap gap-4 items-end text-sm font-bold text-slate-700">
           {/* Search Box */}
           <div className="flex flex-col gap-1.5 flex-1 min-w-[280px]">
-            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Cari Transaksi</label>
+            <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Cari Transaksi</label>
             <div className="relative group">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 group-focus-within:text-[#002B8F] transition-colors">
                 <Search size={18} />
@@ -528,19 +528,19 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                 placeholder="Cari nomor bon atau nama pelanggan..."
                 value={searchQuery}
                 onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#002B8F] focus:bg-white focus:ring-2 focus:ring-[#002B8F]/10 transition-all"
-                style={{ minHeight: '42px' }}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#002B8F] focus:bg-white focus:ring-2 focus:ring-[#002B8F]/10 transition-all"
+                style={{ minHeight: '48px' }}
               />
             </div>
           </div>
 
           {/* Status Filter */}
           <div className="flex flex-col gap-1.5 min-w-[140px]">
-            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Status Pembayaran</label>
+            <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Status Pembayaran</label>
             <select
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value as any); setCurrentPage(1); }}
-              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl outline-none focus:border-[#002B8F] min-h-[42px] cursor-pointer"
+              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-base outline-none focus:border-[#002B8F] min-h-[48px] cursor-pointer"
             >
               <option value="semua">Semua Status</option>
               <option value="Lunas">Lunas</option>
@@ -551,11 +551,11 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
 
           {/* Tipe Filter */}
           <div className="flex flex-col gap-1.5 min-w-[145px]">
-            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Tipe Transaksi</label>
+            <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Tipe Transaksi</label>
             <select
               value={filterTipe}
               onChange={e => { setFilterTipe(e.target.value as any); setCurrentPage(1); }}
-              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl outline-none focus:border-[#002B8F] min-h-[42px] cursor-pointer"
+              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-base outline-none focus:border-[#002B8F] min-h-[48px] cursor-pointer"
             >
               <option value="semua">Semua Tipe</option>
               <option value="biasa">Penjualan Biasa</option>
@@ -565,7 +565,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
 
           {/* Bulan Filter */}
           <div className="flex flex-col gap-1.5 min-w-[140px]">
-            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Bulan</label>
+            <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Bulan</label>
             <select
               value={filterMonth}
               onChange={e => {
@@ -573,7 +573,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                 setFilterMode('semua');
                 setCurrentPage(1);
               }}
-              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl outline-none focus:border-[#002B8F] min-h-[42px] cursor-pointer"
+              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-base outline-none focus:border-[#002B8F] min-h-[48px] cursor-pointer"
             >
               <option value="semua">Semua Bulan</option>
               {[
@@ -599,7 +599,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
 
           {/* Tahun Filter */}
           <div className="flex flex-col gap-1.5 min-w-[100px]">
-            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Tahun</label>
+            <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Tahun</label>
             <select
               value={filterYear}
               onChange={e => {
@@ -611,7 +611,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                   setFilterMonth('semua');
                 }
               }}
-              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl outline-none focus:border-[#002B8F] min-h-[42px] cursor-pointer"
+              className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-base outline-none focus:border-[#002B8F] min-h-[48px] cursor-pointer"
             >
               <option value="semua">Semua Tahun</option>
               {Array.from({ length: currentYear - 2023 + 1 }, (_, i) => 2023 + i).map(yr => (
@@ -632,7 +632,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                 setCurrentPage(1);
               }}
               className="px-4 py-2 border-2 border-slate-350 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm cursor-pointer transition-colors"
-              style={{ minHeight: '42px' }}
+              style={{ minHeight: '48px' }}
             >
               Reset Filter
             </button>
@@ -910,7 +910,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
 
                     {formIsBonus && (
                       <div className="flex items-center gap-2 shrink-0">
-                        <label className="text-xs font-bold text-amber-800">Jumlah Jatah yang Ditukar:</label>
+                        <label className="text-sm font-bold text-amber-800">Jumlah Jatah yang Ditukar:</label>
                         <select
                           value={formBonusCount}
                           onChange={e => setFormBonusCount(Number(e.target.value))}
@@ -1001,12 +1001,12 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                           </td>
                           <td className="p-3 text-right font-mono font-bold text-blue-900">{formatRp(finalUnit)}</td>
                           <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1 min-w-[100px]">
+                            <div className="flex items-center justify-center gap-2 min-w-[148px]">
                               <button
                                 type="button"
                                 onClick={() => handleLineQtyChange(idx, line.qty - 1)}
-                                className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold rounded-md transition-all cursor-pointer text-sm select-none active:scale-[0.9]"
-                                style={{ minWidth: '28px', minHeight: '28px' }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-700 font-extrabold rounded-xl transition-all cursor-pointer text-lg active:scale-[0.95]"
+                                aria-label="Kurangi jumlah"
                               >
                                 -
                               </button>
@@ -1015,13 +1015,14 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                                 min={1}
                                 value={line.qty}
                                 onChange={e => handleLineQtyChange(idx, Number(e.target.value))}
-                                className="w-8 h-7 px-0 py-0 bg-[#002B8F] text-white font-black rounded-md text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                className="w-14 h-12 px-0 py-0 bg-[#002B8F] text-white font-black rounded-xl text-center text-base focus:outline-none focus:ring-2 focus:ring-blue-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                aria-label="Jumlah barang"
                               />
                               <button
                                 type="button"
                                 onClick={() => handleLineQtyChange(idx, line.qty + 1)}
-                                className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-extrabold rounded-md transition-all cursor-pointer text-sm select-none active:scale-[0.9]"
-                                style={{ minWidth: '28px', minHeight: '28px' }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-700 font-extrabold rounded-xl transition-all cursor-pointer text-lg active:scale-[0.95]"
+                                aria-label="Tambah jumlah"
                               >
                                 +
                               </button>
@@ -1127,7 +1128,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                 </div>
 
                 {formIsBonus && (
-                  <p className="text-xs text-amber-700 font-bold bg-amber-50 p-2.5 rounded-lg border border-amber-100">
+                  <p className="text-sm text-amber-800 font-bold bg-amber-50 p-3 rounded-lg border border-amber-100">
                     * Produk ini bernilai Rp 0 pada omzet karena ditukarkan dengan akumulasi bonus yang dimiliki pelanggan.
                   </p>
                 )}
@@ -1274,7 +1275,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
             </div>
 
             <div className="text-right space-y-1">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Pelanggan</span>
+              <span className="text-sm font-bold text-slate-500 uppercase tracking-wide block">Pelanggan</span>
               <span className="text-xl font-extrabold text-slate-900 block">{selectedBon.customerName}</span>
               {selectedBon.is_bonus && (
                 <span className="inline-block bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-300 uppercase tracking-wider">
@@ -1329,7 +1330,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
             {/* Left col: Deskripsi */}
             <div className="space-y-2">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Catatan Tambahan</span>
+              <span className="text-sm font-bold text-slate-500 uppercase tracking-wide block">Catatan Tambahan</span>
               <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-semibold text-slate-700 min-h-[80px]">
                 {selectedBon.deskripsi || 'Tidak ada catatan tambahan untuk transaksi ini.'}
               </div>
