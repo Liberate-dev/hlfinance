@@ -13,6 +13,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,6 +77,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           {errorMsg && (
             <div className="p-4 text-sm font-semibold text-red-600 bg-red-50 rounded-lg border border-red-100/50">
               {errorMsg}
+            </div>
+          )}
+          {infoMsg && (
+            <div className="p-4 text-sm font-semibold text-[#002B8F] bg-blue-50 rounded-lg border border-blue-100">
+              {infoMsg}
             </div>
           )}
 
@@ -143,7 +149,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               href="#forgot-password"
               onClick={(e) => {
                 e.preventDefault();
-                alert('Silakan hubungi administrator untuk mereset kata sandi Anda.');
+                setErrorMsg('');
+                setInfoMsg('Silakan hubungi administrator untuk mereset kata sandi Anda.');
               }}
               className="text-[#002B8F] hover:text-blue-800 font-semibold transition-colors"
             >
@@ -168,7 +175,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           href="#contact-admin"
           onClick={(e) => {
             e.preventDefault();
-            alert('Silakan hubungi pemilik HL untuk mendaftarkan akun.');
+            setErrorMsg('');
+            setInfoMsg('Silakan hubungi pemilik HL untuk mendaftarkan akun.');
           }}
           className="text-[#002B8F] hover:text-blue-800 font-bold transition-colors"
         >

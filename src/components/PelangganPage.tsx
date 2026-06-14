@@ -82,6 +82,8 @@ const renderStatusBadge = (status: 'Open' | 'Lunas' | 'Cancelled' | string) => {
 };
 
 import { useStore } from '../store/useStore';
+import ConfirmDialog from './ui/ConfirmDialog';
+import { toast } from './ui/AppToast';
 
 export default function PelangganPage() {
   const { 
@@ -96,6 +98,9 @@ export default function PelangganPage() {
   } = useStore();
   
   const bons = transactions;
+
+  const notifyError = (msg: string) => toast(msg, 'error');
+  const showSuccess = (msg: string) => toast(msg);
 
   // 1. STATE MANAGEMENT UTAMA
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -235,15 +240,15 @@ export default function PelangganPage() {
   const handleSettleConfirmation = async () => {
     if (settleMode === 'single' && targetBonId) {
       const err = await settleTransaction(targetBonId, settleDate);
-      if (err) { alert(err); return; }
+      if (err) { notifyError(err); return; }
       if (activeBonDetail && activeBonDetail.id === targetBonId) {
         setActiveBonDetail((prev: any) => prev ? { ...prev, status: 'Lunas', tanggal_lunas: settleDate } : null);
       }
-      alert(`Bon berhasil dilunasi pada tanggal ${settleDate}!`);
+      showSuccess(`Bon berhasil dilunasi pada tanggal ${settleDate}!`);
     } else if (settleMode === 'bulk' && selectedCustomerId) {
       const err = await settleBulkTransactions(selectedCustomerId, selectedYearMonth, settleDate);
-      if (err) { alert(err); return; }
-      alert(`Semua tagihan Open bulan ini berhasil dilunasi pada tanggal ${settleDate}!`);
+      if (err) { notifyError(err); return; }
+      showSuccess(`Semua tagihan Open bulan ini berhasil dilunasi pada tanggal ${settleDate}!`);
     }
     setShowSettleModal(false);
   };
@@ -252,23 +257,24 @@ export default function PelangganPage() {
   const handleSaveEditCustomer = async () => {
     if (!editCustomerForm) return;
     if (!editCustomerForm.nama.trim()) {
-      alert("Nama pelanggan tidak boleh kosong!");
+      notifyError("Nama pelanggan tidak boleh kosong!");
       return;
     }
     if (!editCustomerForm.kode.trim()) {
-      alert("Kode pelanggan tidak boleh kosong!");
+      notifyError("Kode pelanggan tidak boleh kosong!");
       return;
     }
     const isDuplicate = customers.some(
       c => c.kode.toLowerCase() === editCustomerForm.kode.trim().toLowerCase() && c.id !== editCustomerForm.id
     );
     if (isDuplicate) {
-      alert("Kode pelanggan sudah digunakan oleh pelanggan lain!");
+      notifyError("Kode pelanggan sudah digunakan oleh pelanggan lain!");
       return;
     }
 
     const err = await updateCustomer(editCustomerForm);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
+    showSuccess('Data pelanggan berhasil disimpan!');
     setIsEditingCustomer(false);
   };
 
@@ -276,18 +282,18 @@ export default function PelangganPage() {
   const handleSaveAddCustomer = async () => {
     if (!addCustomerForm) return;
     if (!addCustomerForm.nama.trim()) {
-      alert("Nama pelanggan tidak boleh kosong!");
+      notifyError("Nama pelanggan tidak boleh kosong!");
       return;
     }
     if (!addCustomerForm.kode.trim()) {
-      alert("Kode pelanggan tidak boleh kosong!");
+      notifyError("Kode pelanggan tidak boleh kosong!");
       return;
     }
     const isDuplicate = customers.some(
       c => c.kode.toLowerCase() === addCustomerForm.kode.trim().toLowerCase()
     );
     if (isDuplicate) {
-      alert("Kode pelanggan sudah digunakan oleh pelanggan lain!");
+      notifyError("Kode pelanggan sudah digunakan oleh pelanggan lain!");
       return;
     }
 
@@ -301,9 +307,9 @@ export default function PelangganPage() {
       alamat: addCustomerForm.alamat,
       deleted_at: null,
     });
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     setIsAddingCustomer(false);
-    alert(`Pelanggan baru "${addCustomerForm.nama.trim()}" berhasil ditambahkan!`);
+    showSuccess(`Pelanggan baru "${addCustomerForm.nama.trim()}" berhasil ditambahkan!`);
   };
 
   // Real PDF export for customer detail (piutang/transaksi per bulan) with proper layout
@@ -534,7 +540,7 @@ export default function PelangganPage() {
                             onClick={() => {
                               const val = Number(newLmDiscountAdd);
                               if (isNaN(val) || val < 0 || val > 100 || newLmDiscountAdd.trim() === '') {
-                                alert("Masukkan nilai diskon antara 0 dan 100!");
+                                notifyError("Masukkan nilai diskon antara 0 dan 100!");
                                 return;
                               }
                               setAddCustomerForm(prev => {
@@ -601,7 +607,7 @@ export default function PelangganPage() {
                             onClick={() => {
                               const val = Number(newBrDiscountAdd);
                               if (isNaN(val) || val < 0 || val > 100 || newBrDiscountAdd.trim() === '') {
-                                alert("Masukkan nilai diskon antara 0 dan 100!");
+                                notifyError("Masukkan nilai diskon antara 0 dan 100!");
                                 return;
                               }
                               setAddCustomerForm(prev => {
@@ -664,8 +670,8 @@ export default function PelangganPage() {
                 placeholder="Cari pelanggan..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#002B8F] focus:ring-2 focus:ring-[#002B8F]/10 transition-all shadow-xs"
-                style={{ minHeight: '44px' }}
+                className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-base font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#002B8F] focus:ring-2 focus:ring-[#002B8F]/10 transition-all shadow-xs"
+                style={{ minHeight: '48px' }}
               />
             </div>
           </div>
@@ -690,9 +696,72 @@ export default function PelangganPage() {
             </button>
           </div>
 
-          {/* Tabel Pelanggan (Scroll Mode Mandiri) */}
+          {/* Daftar pelanggan: kartu di mobile, tabel di desktop */}
           <div className="bg-white border-2 border-slate-200/60 rounded-2xl shadow-xs overflow-hidden">
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <div className="md:hidden p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+              {filteredCustomers.length > 0 ? filteredCustomers.map((c) => {
+                const isEligible = isEligibleForBonus(c);
+                return (
+                  <div
+                    key={c.id}
+                    className={`border-2 rounded-2xl p-5 space-y-4 ${
+                      isEligible ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-mono font-bold text-slate-500 text-sm">{c.kode}</p>
+                        <p className="font-extrabold text-slate-900 text-xl mt-1">{c.nama}</p>
+                        {isEligible && (
+                          <span className="inline-flex items-center gap-1 mt-2 bg-amber-100 text-amber-900 text-xs font-extrabold px-3 py-1.5 rounded-full border border-amber-300 uppercase">
+                            <Award size={13} className="text-amber-600" /> Bonus Layak
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="font-bold text-slate-500">Diskon LM</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.diskon_lm.map((d, i) => (
+                            <span key={i} className="bg-blue-50 text-[#002B8F] text-xs font-extrabold px-2 py-1 rounded-lg border border-blue-200">{d}%</span>
+                          ))}
+                          {c.diskon_lm.length === 0 && <span className="text-slate-400">—</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-500">Diskon BR</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.diskon_br.map((d, i) => (
+                            <span key={i} className="bg-emerald-50 text-emerald-800 text-xs font-extrabold px-2 py-1 rounded-lg border border-emerald-200">{d}%</span>
+                          ))}
+                          {c.diskon_br.length === 0 && <span className="text-slate-400">—</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-500">Ambang Bonus</p>
+                      <p className="font-extrabold text-slate-800 text-lg mt-1">Rp {c.threshold_bonus.toLocaleString('id-ID')}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedCustomerId(c.id);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full py-4 bg-[#002B8F] hover:bg-[#001E66] text-white font-extrabold text-base rounded-2xl min-h-[48px]"
+                    >
+                      Lihat Detail
+                    </button>
+                  </div>
+                );
+              }) : (
+                <p className="py-12 text-center text-base font-bold text-slate-400">
+                  Tidak ada data pelanggan yang cocok.
+                </p>
+              )}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto max-h-[600px] overflow-y-auto">
               <table className="w-full border-collapse text-left">
                 <thead className="bg-slate-50 border-b-2 border-slate-200 sticky top-0 z-10">
                   <tr>
@@ -1061,7 +1130,7 @@ export default function PelangganPage() {
                           onClick={() => {
                             const val = Number(newLmDiscount);
                             if (isNaN(val) || val < 0 || val > 100 || newLmDiscount.trim() === '') {
-                              alert("Masukkan nilai diskon antara 0 dan 100!");
+                              notifyError("Masukkan nilai diskon antara 0 dan 100!");
                               return;
                             }
                             setEditCustomerForm(prev => {
@@ -1128,7 +1197,7 @@ export default function PelangganPage() {
                           onClick={() => {
                             const val = Number(newBrDiscount);
                             if (isNaN(val) || val < 0 || val > 100 || newBrDiscount.trim() === '') {
-                              alert("Masukkan nilai diskon antara 0 dan 100!");
+                              notifyError("Masukkan nilai diskon antara 0 dan 100!");
                               return;
                             }
                             setEditCustomerForm(prev => {
@@ -1396,9 +1465,49 @@ export default function PelangganPage() {
               </div>
             </div>
           </div>
-          {/* Tabel Transaksi dengan Paginasi 20 Item (Wajib PRD) */}
+          {/* Transaksi: kartu di mobile, tabel di desktop */}
           <div className="bg-white border-2 border-slate-200/60 rounded-2xl shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="md:hidden p-4 space-y-4">
+              {paginatedBons.map((bon) => (
+                <div key={bon.id} className="border-2 border-slate-200 rounded-2xl p-5 space-y-4 bg-white">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-500">
+                        {new Date(bon.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                      <p className="font-extrabold text-[#002B8F] text-lg mt-1">{bon.nomor_bon}</p>
+                    </div>
+                    {renderStatusBadge(bon.status)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-500">Total Tagihan</p>
+                    <p className="text-2xl font-black text-slate-900 mt-1">Rp {(bon.omzet + bon.ongkir).toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={() => setActiveBonDetail(bon)}
+                      className="w-full flex items-center justify-center gap-2 py-4 border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-[#002B8F] font-bold rounded-2xl min-h-[48px]"
+                    >
+                      <Eye size={18} /> Lihat Detail
+                    </button>
+                    {bon.status === 'Open' ? (
+                      <button
+                        onClick={() => {
+                          setTargetBonId(bon.id);
+                          setSettleMode('single');
+                          setShowSettleModal(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl min-h-[48px]"
+                      >
+                        <Check size={18} /> Bayar Lunas
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full border-collapse text-left">
                 <thead className="bg-slate-50 border-b-2 border-slate-200">
                   <tr>
@@ -1512,57 +1621,33 @@ export default function PelangganPage() {
         </div>
       )}
 
-      {/* 7. MODAL PELUNASAN (Bulk & Single) */}
-      {showSettleModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-center space-x-3 text-emerald-600">
-              <CheckSquare size={26} />
-              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                Konfirmasi Pelunasan
-              </h3>
-            </div>
-            
-            <p className="text-sm font-semibold text-slate-500 leading-relaxed">
-              {settleMode === 'bulk' 
-                ? 'Semua transaksi berstatus "Open" pada bulan Juni 2026 untuk pelanggan ini akan diubah statusnya menjadi Lunas.'
-                : 'Transaksi terpilih akan diubah statusnya menjadi Lunas secara permanen.'}
-            </p>
-
-            <div className="space-y-2">
-              <label htmlFor="settle-date" className="block text-sm font-bold text-slate-500 uppercase tracking-wide">
-                Tanggal Pelunasan
-              </label>
-              <input
-                id="settle-date"
-                type="date"
-                value={settleDate}
-                max={new Date().toISOString().split('T')[0]}
-                onChange={(e) => setSettleDate(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:border-[#002B8F]"
-                style={{ minHeight: '44px' }}
-              />
-            </div>
-
-            <div className="flex items-center justify-end space-x-3.5 pt-2">
-              <button
-                onClick={() => setShowSettleModal(false)}
-                className="px-4 py-2.5 border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 transition-all cursor-pointer"
-                style={{ minHeight: '44px' }}
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleSettleConfirmation}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm shadow-md transition-all cursor-pointer"
-                style={{ minHeight: '44px' }}
-              >
-                Konfirmasi Lunas
-              </button>
-            </div>
-          </div>
+      <ConfirmDialog
+        open={showSettleModal}
+        title="Konfirmasi Pelunasan"
+        description={
+          settleMode === 'bulk'
+            ? `Semua transaksi berstatus "Open" pada ${monthsList.find(m => m.value === selectedMonth)?.label ?? ''} ${selectedYear} untuk pelanggan ini akan diubah menjadi Lunas.`
+            : 'Transaksi terpilih akan diubah statusnya menjadi Lunas secara permanen.'
+        }
+        confirmLabel="Konfirmasi Lunas"
+        tone="success"
+        onConfirm={handleSettleConfirmation}
+        onCancel={() => setShowSettleModal(false)}
+      >
+        <div className="space-y-2">
+          <label htmlFor="settle-date" className="block text-sm font-bold text-slate-500 uppercase tracking-wide">
+            Tanggal Pelunasan
+          </label>
+          <input
+            id="settle-date"
+            type="date"
+            value={settleDate}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={(e) => setSettleDate(e.target.value)}
+            className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-base font-semibold text-slate-800 focus:outline-none focus:border-[#002B8F] min-h-[48px]"
+          />
         </div>
-      )}
+      </ConfirmDialog>
     </div>
   );
 }

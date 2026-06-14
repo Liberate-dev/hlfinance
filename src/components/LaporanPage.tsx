@@ -388,7 +388,7 @@ export default function LaporanPage() {
 
   if (detailCustomer) {
     return (
-      <div className="space-y-8 animate-fade-in text-slate-900 select-none">
+      <div className="space-y-8 animate-fade-in text-slate-900">
         
         {/* HEADER KEMBALI */}
         <div className="flex items-center border-b-2 border-slate-200 pb-5">
@@ -420,7 +420,53 @@ export default function LaporanPage() {
 
           {customerDetailTransactions.length > 0 ? (
             <div className="overflow-hidden border-2 border-slate-200 rounded-2xl shadow-2xs">
-              <div className="overflow-x-auto">
+              <div className="md:hidden p-4 space-y-4">
+                {customerDetailTransactions.map((t) => {
+                  let omzLM = 0;
+                  let omzBR = 0;
+                  let laba = 0;
+                  (t.lines ?? []).forEach(l => {
+                    const lineOmzet = (l.harga_final ?? 0) * (l.qty ?? 0);
+                    if (l.tipe === 'LM') omzLM += lineOmzet;
+                    else if (l.tipe === 'BR') omzBR += lineOmzet;
+                    const modal = l.harga_modal_snapshot ?? 0;
+                    laba += (l.harga_final - modal) * l.qty;
+                  });
+                  return (
+                    <div key={t.id} className="border-2 border-slate-200 rounded-2xl p-5 space-y-3 bg-white">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-500">
+                            {new Date(t.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                          <p className="font-mono font-black text-[#002B8F] text-lg mt-1">{t.nomor_bon}</p>
+                        </div>
+                        <span className={`inline-flex px-3 py-2 rounded-xl text-xs font-black uppercase ${
+                          t.status === 'Lunas'
+                            ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-200'
+                            : t.status === 'Open'
+                              ? 'bg-amber-50 text-amber-700 border-2 border-amber-200'
+                              : 'bg-rose-50 text-rose-700 border-2 border-rose-200'
+                        }`}>
+                          {t.status === 'Open' ? 'Piutang' : t.status === 'Lunas' ? 'Lunas' : 'Batal'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div><span className="text-slate-500 font-bold">Omzet LM</span><p className="font-black text-slate-800">{formatRp(omzLM)}</p></div>
+                        <div><span className="text-slate-500 font-bold">Omzet BR</span><p className="font-black text-slate-800">{formatRp(omzBR)}</p></div>
+                        <div><span className="text-slate-500 font-bold">Ongkir</span><p className="font-black text-slate-800">{formatRp(t.ongkir)}</p></div>
+                        <div><span className="text-slate-500 font-bold">Laba HL</span><p className="font-black text-emerald-800">{t.status === 'Lunas' ? formatRp(laba) : '—'}</p></div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-500">Total Tagihan</p>
+                        <p className="text-2xl font-black text-slate-900 mt-1">{formatRp(t.omzet + t.ongkir)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full border-collapse text-left text-base">
                   <thead className="bg-[#f0f4f9] border-b-2 border-slate-200 font-black text-slate-700">
                     <tr>
@@ -516,7 +562,7 @@ export default function LaporanPage() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in text-slate-900 select-none">
+    <div className="space-y-8 animate-fade-in text-slate-900">
       
       {/* HEADER UTAMA */}
       <div className="border-b-2 border-slate-200 pb-6">
@@ -847,9 +893,67 @@ export default function LaporanPage() {
           </button>
         </div>
 
-        {/* Tabel Data Performa */}
+        {/* Data performa: kartu di mobile, tabel di desktop */}
         <div className="overflow-hidden border-2 border-slate-200 rounded-2xl shadow-2xs">
-          <div className="overflow-x-auto">
+          <div className="md:hidden p-4 space-y-4">
+            {paginatedCustomers.length > 0 ? paginatedCustomers.map((row) => (
+              <div key={row.customer.id} className="border-2 border-slate-200 rounded-2xl p-5 space-y-4 bg-white">
+                <div>
+                  <p className="font-black text-slate-900 text-xl">{row.customer.nama}</p>
+                  <p className="text-slate-500 font-mono text-sm font-bold mt-1 uppercase">{row.customer.kode}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="font-bold text-slate-500">Jumlah Bon</p>
+                    <p className="font-black text-slate-800 text-lg mt-1">{row.totalTransaksi}</p>
+                  </div>
+                  {activeReportTab === 'bonus' ? (
+                    <>
+                      <div>
+                        <p className="font-bold text-slate-500">Unit Bonus</p>
+                        <p className="font-black text-slate-900 text-lg mt-1">{row.unitBonus} Unit</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="font-bold text-slate-500">Subsidi</p>
+                        <p className="font-black text-emerald-800 text-xl mt-1">{formatRp(row.subsidi)}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="font-bold text-slate-500">Omzet Lunas</p>
+                        <p className="font-black text-[#002B8F] text-lg mt-1">{formatRp(row.omzetLunas)}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-500">Laba HL</p>
+                        <p className="font-black text-emerald-800 text-lg mt-1">{formatRp(row.labaHL)}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-500">Piutang</p>
+                        <p className="font-black text-amber-800 text-lg mt-1">{row.piutang > 0 ? formatRp(row.piutang) : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-500">Sudah Dibayar</p>
+                        <p className="font-black text-indigo-900 text-lg mt-1">{formatRp(row.terbayar)}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => setDetailCustomer(row.customer)}
+                  className="w-full py-4 bg-white border-2 border-[#002B8F] text-[#002B8F] hover:bg-blue-50 font-black text-base rounded-2xl min-h-[48px]"
+                >
+                  Lihat Detail
+                </button>
+              </div>
+            )) : (
+              <p className="py-16 text-center text-slate-500 font-black text-lg">
+                Tidak ada data performa pelanggan untuk kriteria filter ini.
+              </p>
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead className="bg-[#f0f4f9] border-b-2 border-slate-200 text-sm font-black text-slate-700">
                 <tr>
@@ -914,7 +1018,7 @@ export default function LaporanPage() {
                       <td className="py-4 px-3 text-center">
                         <button
                           onClick={() => setDetailCustomer(row.customer)}
-                          className="px-5 py-2 bg-white border-2 border-slate-300 hover:bg-slate-50 text-slate-800 font-black text-sm rounded-xl transition-all cursor-pointer active:scale-95"
+                          className="px-6 py-3 bg-white border-2 border-slate-300 hover:bg-slate-50 text-slate-800 font-black text-base rounded-xl transition-all cursor-pointer min-h-[48px] min-w-[100px]"
                         >
                           Detail
                         </button>

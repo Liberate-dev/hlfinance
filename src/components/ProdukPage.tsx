@@ -7,7 +7,6 @@ import {
   Trash2,
   Package,
   AlertTriangle,
-  CheckCircle2,
   Wand2,
   PenLine,
 } from 'lucide-react';
@@ -62,6 +61,8 @@ const MOCK_PRODUK: Produk[] = [
 */
 
 import { useStore } from '../store/useStore';
+import ConfirmDialog from './ui/ConfirmDialog';
+import { toast } from './ui/AppToast';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -84,12 +85,9 @@ export default function ProdukPage() {
   const [formKodeManual, setFormKodeManual] = useState('');
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState('');
 
-  const showSuccess = (msg: string) => {
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(''), 3500);
-  };
+  const notifyError = (msg: string) => toast(msg, 'error');
+  const showSuccess = (msg: string) => toast(msg);
 
   // ── Derived data ─────────────────────────────────────────────────────────────
 
@@ -158,7 +156,7 @@ export default function ProdukPage() {
 
   const handleSaveAdd = async () => {
     const err = validateForm(false);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     const saveErr = await addProduct({
       kode: effectiveKode.trim(),
       nama: formNama.trim(),
@@ -167,7 +165,7 @@ export default function ProdukPage() {
       harga_base: formHargaBase,
       deleted_at: null,
     });
-    if (saveErr) { alert(saveErr); return; }
+    if (saveErr) { notifyError(saveErr); return; }
     showSuccess(`Produk "${formNama.trim()}" berhasil ditambahkan!`);
     backToList();
   };
@@ -175,7 +173,7 @@ export default function ProdukPage() {
   const handleSaveEdit = async () => {
     if (!editTarget) return;
     const err = validateForm(true);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     const saveErr = await updateProduct({
       ...editTarget,
       kode: effectiveKode.trim(),
@@ -184,14 +182,14 @@ export default function ProdukPage() {
       harga_modal: formHargaModal,
       harga_base: formHargaBase
     });
-    if (saveErr) { alert(saveErr); return; }
+    if (saveErr) { notifyError(saveErr); return; }
     showSuccess(`Produk "${formNama.trim()}" berhasil disimpan!`);
     backToList();
   };
 
   const handleSoftDelete = async (id: string) => {
     const err = await deleteProduct(id);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     setConfirmDeleteId(null);
     showSuccess('Produk berhasil dihapus. Data transaksi lama tetap tersimpan.');
   };
@@ -534,9 +532,53 @@ export default function ProdukPage() {
         ))}
       </div>
 
-      {/* Table */}
+      {/* List: cards on mobile, table on desktop */}
       <div className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden p-4 space-y-4">
+          {paginated.length > 0 ? paginated.map(p => (
+            <div key={p.id} className="border-2 border-slate-200 rounded-2xl p-5 space-y-4 bg-white shadow-xs">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono font-bold text-slate-500 text-sm">{p.kode}</p>
+                  <p className="font-extrabold text-slate-900 text-xl mt-1">{p.nama}</p>
+                </div>
+                <span className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-black border-2 ${
+                  p.tipe === 'LM'
+                    ? 'bg-blue-50 text-[#002B8F] border-blue-200'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}>
+                  {p.tipe}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-500">Harga Jual</p>
+                <p className="text-2xl font-black text-[#002B8F] mt-1">{formatRp(p.harga_base)}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => openEdit(p)}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 border-2 border-slate-300 hover:border-[#002B8F] hover:bg-blue-50 text-slate-700 hover:text-[#002B8F] font-extrabold text-base rounded-2xl min-h-[48px]"
+                >
+                  <Pencil size={16} /> Ubah
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteId(p.id)}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 border-2 border-rose-200 hover:bg-rose-50 text-rose-600 font-extrabold text-base rounded-2xl min-h-[48px]"
+                >
+                  <Trash2 size={16} /> Hapus
+                </button>
+              </div>
+            </div>
+          )) : (
+            <div className="py-16 text-center">
+              <Package size={56} className="text-slate-200 mx-auto mb-4" />
+              <p className="text-xl font-extrabold text-slate-400">Tidak ada produk yang cocok.</p>
+              <p className="text-base font-semibold text-slate-300 mt-1">Coba ubah kata pencarian atau filter tipe.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <thead className="bg-slate-50 border-b-2 border-slate-200">
               <tr>
@@ -630,66 +672,31 @@ export default function ProdukPage() {
     </div>
   );
 
-  // ─── DELETE MODAL ─────────────────────────────────────────────────────────────
-
-  const renderDeleteModal = () => {
-    const target = produkList.find(p => p.id === confirmDeleteId);
-    if (!target) return null;
-    return (
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-rose-100 rounded-2xl shrink-0">
-              <Trash2 size={32} className="text-rose-600" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-black text-slate-900">Hapus Produk?</h3>
-              <p className="text-base font-semibold text-slate-500 mt-1">{target.kode} — {target.nama}</p>
-            </div>
-          </div>
-          <div className="p-5 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start gap-3">
-            <AlertTriangle size={24} className="text-amber-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-lg font-extrabold text-amber-900">Apa yang terjadi setelah dihapus?</p>
-              <p className="text-base font-semibold text-amber-800 leading-relaxed">
-                Produk tidak bisa dipilih di transaksi baru.<br />
-                Semua catatan transaksi lama <strong>tetap aman</strong> dan tidak berubah.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <button onClick={() => setConfirmDeleteId(null)}
-              className="flex-1 py-4 border-2 border-slate-300 text-slate-700 font-extrabold rounded-2xl text-lg hover:bg-slate-100 cursor-pointer"
-              style={{ minHeight: '56px' }}>
-              Batal
-            </button>
-            <button onClick={() => handleSoftDelete(target.id)}
-              className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl text-lg shadow-md cursor-pointer"
-              style={{ minHeight: '56px' }}>
-              Ya, Hapus
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ─── TOAST ────────────────────────────────────────────────────────────────────
-
-  const renderToast = () => successMsg ? (
-    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-emerald-700 text-white px-6 py-4 rounded-2xl shadow-2xl font-extrabold text-lg">
-      <CheckCircle2 size={24} className="shrink-0" />
-      {successMsg}
-    </div>
-  ) : null;
-
-  // ─── MAIN ─────────────────────────────────────────────────────────────────────
+  const deleteTarget = produkList.find(p => p.id === confirmDeleteId);
 
   return (
     <div className="space-y-6">
       {(viewMode === 'add' || viewMode === 'edit') ? renderForm() : renderList()}
-      {confirmDeleteId && renderDeleteModal()}
-      {renderToast()}
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Hapus Produk?"
+        description={deleteTarget ? `${deleteTarget.kode} — ${deleteTarget.nama}` : ''}
+        confirmLabel="Ya, Hapus"
+        tone="danger"
+        onConfirm={() => deleteTarget && handleSoftDelete(deleteTarget.id)}
+        onCancel={() => setConfirmDeleteId(null)}
+      >
+        <div className="p-5 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start gap-3">
+          <AlertTriangle size={24} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-base font-extrabold text-amber-900">Apa yang terjadi setelah dihapus?</p>
+            <p className="text-base font-semibold text-amber-800 leading-relaxed">
+              Produk tidak bisa dipilih di transaksi baru. Semua catatan transaksi lama tetap aman dan tidak berubah.
+            </p>
+          </div>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

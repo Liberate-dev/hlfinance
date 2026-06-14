@@ -8,6 +8,7 @@ import PenjualanPage from './components/PenjualanPage';
 import LaporanPage from './components/LaporanPage';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useStore } from './store/useStore';
+import AppToastHost from './components/ui/AppToast';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -69,10 +70,10 @@ function App() {
       return (
         <div className="p-6 bg-red-50 border border-red-100 rounded-xl text-red-700">
           <p className="font-bold mb-1">Gagal memuat data</p>
-          <p className="text-sm">{dataError}</p>
+          <p className="text-base">{dataError}</p>
           <button
             onClick={() => fetchAllData()}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold"
+            className="mt-4 px-6 py-3 bg-red-600 text-white rounded-xl text-base font-bold min-h-[48px]"
           >
             Coba Lagi
           </button>
@@ -114,18 +115,21 @@ function App() {
   }
 
   return (
-    <DashboardLayout
-      activeTab={activeTab}
-      setActiveTab={navigateSidebar}
-      onLogout={async () => {
-        await supabase.auth.signOut();
-        setIsLoggedIn(false);
-        setPenjualanStartInAdd(false);
-        setActiveTab('beranda');
-      }}
-    >
-      {renderActiveContent()}
-    </DashboardLayout>
+    <>
+      <DashboardLayout
+        activeTab={activeTab}
+        setActiveTab={navigateSidebar}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          setIsLoggedIn(false);
+          setPenjualanStartInAdd(false);
+          setActiveTab('beranda');
+        }}
+      >
+        {renderActiveContent()}
+      </DashboardLayout>
+      <AppToastHost />
+    </>
   );
 }
 

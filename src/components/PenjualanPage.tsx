@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { bonToPdfInput, downloadBonPdf, type BonPdfInput } from '../lib/bonPdf';
 import BonNotaPreview from './BonNotaPreview';
+import ConfirmDialog from './ui/ConfirmDialog';
+import { toast } from './ui/AppToast';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,6 +124,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
   const [filterMonth, setFilterMonth] = useState<string>('semua');
   const [filterYear, setFilterYear] = useState<string>('semua');
   const [currentPage, setCurrentPage] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Navigation states
   const [viewMode, setViewMode] = useState<'list' | 'add' | 'edit'>(() =>
@@ -155,12 +158,8 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
   // Delete Modal state
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  // Success Notification
-  const [toastMsg, setToastMsg] = useState('');
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
-  };
+  const showToast = (msg: string) => toast(msg);
+  const notifyError = (msg: string) => toast(msg, 'error');
 
   // ── Derived Data ─────────────────────────────────────────────────────────────
   
@@ -307,9 +306,9 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
   const formCalcs = getFormCalculations();
 
   const handleSave = async () => {
-    if (!formNomorBon.trim()) { alert('Nomor Bon wajib diisi.'); return; }
-    if (!formCustomerId) { alert('Pelanggan wajib dipilih.'); return; }
-    if (formLines.some(l => !l.productId)) { alert('Semua baris produk harus dipilih.'); return; }
+    if (!formNomorBon.trim()) { notifyError('Nomor Bon wajib diisi.'); return; }
+    if (!formCustomerId) { notifyError('Pelanggan wajib dipilih.'); return; }
+    if (formLines.some(l => !l.productId)) { notifyError('Semua baris produk harus dipilih.'); return; }
 
     const isEdit = viewMode === 'edit';
 
@@ -318,7 +317,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
       (!isEdit || t.id !== editTarget?.id)
     );
     if (dup) {
-      alert(`Nomor Bon "${formNomorBon}" sudah terdaftar di sistem. Harap gunakan nomor lain.`);
+      notifyError(`Nomor Bon "${formNomorBon}" sudah terdaftar di sistem. Harap gunakan nomor lain.`);
       return;
     }
 
@@ -368,7 +367,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
 
     const err = isEdit ? await updateTransaction(newBon) : await addTransaction(newBon);
     if (err) {
-      alert(err);
+      notifyError(err);
       return;
     }
 
@@ -388,7 +387,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
   const confirmSettle = async () => {
     if (!settleTargetId) return;
     const err = await settleTransaction(settleTargetId, settleDate);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     setSettleTargetId(null);
     showToast('Bon berhasil dilunasi!');
     const updated = useStore.getState().transactions.find(t => t.id === selectedBon?.id);
@@ -398,7 +397,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
   const confirmCancel = async () => {
     if (!cancelTargetId) return;
     const err = await cancelTransaction(cancelTargetId);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     setCancelTargetId(null);
     showToast('Bon berhasil dibatalkan.');
     const updated = useStore.getState().transactions.find(t => t.id === selectedBon?.id);
@@ -408,7 +407,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
   const confirmDelete = async () => {
     if (!deleteTargetId) return;
     const err = await deleteTransaction(deleteTargetId);
-    if (err) { alert(err); return; }
+    if (err) { notifyError(err); return; }
     setDeleteTargetId(null);
     setSelectedBon(null);
     showToast('Bon berhasil dihapus.');
@@ -479,7 +478,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                     ? 'bg-[#e8f0fe] text-[#002B8F] border-blue-200 shadow-sm'
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                 }`}
-                style={{ minHeight: '40px' }}
+                style={{ minHeight: '48px' }}
               >
                 Semua
               </button>
@@ -496,7 +495,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                     ? 'bg-[#e8f0fe] text-[#002B8F] border-blue-200 shadow-sm'
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                 }`}
-                style={{ minHeight: '40px' }}
+                style={{ minHeight: '48px' }}
               >
                 Bulan Ini
               </button>
@@ -514,8 +513,16 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
           </button>
         </div>
 
+        <button
+          type="button"
+          className="md:hidden w-full py-3.5 border-2 border-slate-200 rounded-2xl font-bold text-base text-slate-700 min-h-[48px]"
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          {filtersOpen ? 'Sembunyikan Filter' : 'Tampilkan Filter Lanjutan'}
+        </button>
+
         {/* Detailed Filters (Search, Status, Tipe, Bulan, Tahun) */}
-        <div className="border-t border-slate-100 pt-4 flex flex-wrap gap-4 items-end text-sm font-bold text-slate-700">
+        <div className={`border-t border-slate-100 pt-4 flex-wrap gap-4 items-end text-sm font-bold text-slate-700 ${filtersOpen ? 'flex' : 'hidden'} md:flex`}>
           {/* Search Box */}
           <div className="flex flex-col gap-1.5 flex-1 min-w-[280px]">
             <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Cari Transaksi</label>
@@ -640,9 +647,65 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
         </div>
       </div>
 
-      {/* Table view */}
+      {/* List view: cards on mobile, table on desktop */}
       <div className="bg-white border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        <div className="md:hidden p-4 space-y-4">
+          {paginated.length > 0 ? paginated.map((t) => {
+            const isLunas = t.status === 'Lunas';
+            const isCancelled = t.status === 'Cancelled';
+            const dateObj = formatDateMockup(t.tanggal);
+            return (
+              <div key={t.id} className="border-2 border-slate-200 rounded-2xl p-5 space-y-4 bg-white shadow-xs">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-500">{dateObj.dayMonth} {dateObj.year}</p>
+                    <p className="font-mono font-black text-[#002B8F] text-lg mt-1">{t.nomor_bon}</p>
+                  </div>
+                  {isLunas ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-sm font-black">
+                      <Check size={16} /> Lunas
+                    </span>
+                  ) : isCancelled ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-full text-sm font-black">
+                      Batal
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-sm font-black">
+                      Piutang
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-500">Pelanggan</p>
+                  <p className="text-xl font-black text-slate-900 mt-1">{t.customerName}</p>
+                  {t.is_bonus && (
+                    <span className="inline-block mt-2 bg-amber-50 text-amber-800 text-sm font-black px-3 py-1 rounded-full border border-amber-200 uppercase">
+                      Bonus
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-500">Total Tagihan</p>
+                  <p className="text-2xl font-black text-slate-900 mt-1">{formatRp(t.omzet + t.ongkir)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBon(t)}
+                  className="w-full py-4 bg-white border-2 border-[#002B8F] text-[#002B8F] hover:bg-blue-50 font-black text-base rounded-2xl min-h-[48px]"
+                >
+                  Lihat Detail
+                </button>
+              </div>
+            );
+          }) : (
+            <div className="py-16 text-center">
+              <Receipt size={56} className="text-slate-200 mx-auto mb-4" />
+              <p className="text-xl font-extrabold text-slate-400">Tidak ada transaksi ditemukan.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#f0f4f9] border-b border-slate-200">
               <tr>
@@ -704,7 +767,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                         <button
                           onClick={() => setSelectedBon(t)}
                           className="w-28 py-3 bg-white border-2 border-[#002B8F] text-[#002B8F] hover:bg-blue-50 font-black text-[15px] rounded-xl transition-all cursor-pointer leading-tight text-center shadow-xs"
-                          style={{ minHeight: '42px' }}
+                          style={{ minHeight: '48px' }}
                         >
                           Lihat Detail
                         </button>
@@ -735,7 +798,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
               <button 
                 disabled={currentPage === 1} 
                 onClick={() => setCurrentPage(p => p - 1)}
-                className="w-10 h-10 border border-slate-200 bg-white rounded-xl font-extrabold text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer flex items-center justify-center"
+                className="w-12 h-12 border border-slate-200 bg-white rounded-xl font-extrabold text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer flex items-center justify-center text-lg"
               >
                 &lt;
               </button>
@@ -745,7 +808,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
                   <button 
                     key={pg} 
                     onClick={() => setCurrentPage(pg)}
-                    className={`w-10 h-10 font-extrabold rounded-xl flex items-center justify-center cursor-pointer ${
+                    className={`w-12 h-12 font-extrabold rounded-xl flex items-center justify-center cursor-pointer text-base ${
                       pg === currentPage ? 'bg-[#002B8F] text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                     }`}
                   >
@@ -755,7 +818,7 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
               <button 
                 disabled={currentPage === totalPages} 
                 onClick={() => setCurrentPage(p => p + 1)}
-                className="w-10 h-10 border border-slate-200 bg-white rounded-xl font-extrabold text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer flex items-center justify-center"
+                className="w-12 h-12 border border-slate-200 bg-white rounded-xl font-extrabold text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer flex items-center justify-center text-lg"
               >
                 &gt;
               </button>
@@ -1402,126 +1465,48 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
           ? renderDetail() 
           : renderList()}
 
-      {/* Settle Date Modal */}
-      {settleTargetId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-                <Check size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Konfirmasi Pelunasan</h3>
-            </div>
-            
-            <div className="space-y-2">
-              <label htmlFor="settle-date-input" className="block text-sm font-bold text-slate-600">
-                Pilih Tanggal Pembayaran/Pelunasan
-              </label>
-              <input
-                id="settle-date-input"
-                type="date"
-                value={settleDate}
-                max={todayDateStr}
-                onChange={e => setSettleDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-base font-semibold text-slate-900 focus:outline-none focus:border-emerald-600"
-                style={{ minHeight: '44px' }}
-              />
-              <p className="text-xs text-slate-400">
-                Omzet, laba, dan akumulasi bonus akan diakui terhitung pada tanggal pelunasan ini (Cash Basis).
-              </p>
-            </div>
+      <ConfirmDialog
+        open={!!settleTargetId}
+        title="Konfirmasi Pelunasan"
+        tone="success"
+        confirmLabel="Lunasi Sekarang"
+        onCancel={() => setSettleTargetId(null)}
+        onConfirm={confirmSettle}
+        description="Pilih tanggal pelunasan. Omzet, laba, dan akumulasi bonus diakui pada tanggal ini (Cash Basis)."
+      >
+        <label htmlFor="settle-date-input" className="block text-sm font-bold text-slate-600">
+          Tanggal Pembayaran / Pelunasan
+        </label>
+        <input
+          id="settle-date-input"
+          type="date"
+          value={settleDate}
+          max={todayDateStr}
+          onChange={(e) => setSettleDate(e.target.value)}
+          className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-300 rounded-xl text-base font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 min-h-[48px]"
+        />
+      </ConfirmDialog>
 
-            <div className="flex gap-3 justify-end pt-2">
-              <button 
-                onClick={() => setSettleTargetId(null)}
-                className="px-4 py-2 border border-slate-300 text-slate-600 hover:text-slate-800 font-bold rounded-xl text-sm"
-              >
-                Batal
-              </button>
-              <button 
-                onClick={confirmSettle}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm"
-              >
-                Lunasi Sekarang
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!cancelTargetId}
+        title="Batalkan Transaksi?"
+        tone="danger"
+        confirmLabel="Ya, Batalkan"
+        cancelLabel="Kembali"
+        onCancel={() => setCancelTargetId(null)}
+        onConfirm={confirmCancel}
+        description="Bon yang dibatalkan tidak masuk omzet atau piutang. Status Batal bersifat permanen."
+      />
 
-      {/* Cancel Confirmation Modal */}
-      {cancelTargetId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
-                <AlertTriangle size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Batalkan Transaksi?</h3>
-            </div>
-            
-            <p className="text-sm font-medium text-slate-600 leading-relaxed">
-              Apakah Anda yakin ingin membatalkan Bon ini? Transaksi yang dibatalkan tidak akan dihitung ke omzet atau piutang, dan statusnya menjadi permanen **Batal (Cancelled)**.
-            </p>
-
-            <div className="flex gap-3 justify-end pt-2">
-              <button 
-                onClick={() => setCancelTargetId(null)}
-                className="px-4 py-2 border border-slate-300 text-slate-600 hover:text-slate-800 font-bold rounded-xl text-sm"
-              >
-                Kembali
-              </button>
-              <button 
-                onClick={confirmCancel}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm"
-              >
-                Ya, Batalkan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteTargetId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="p-2.5 bg-red-50 text-red-600 rounded-xl">
-                <AlertTriangle size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Hapus Transaksi?</h3>
-            </div>
-            
-            <p className="text-sm font-medium text-slate-600 leading-relaxed">
-              Apakah Anda yakin ingin menghapus Bon ini secara permanen dari database? Tindakan ini tidak dapat dibatalkan.
-            </p>
-
-            <div className="flex gap-3 justify-end pt-2">
-              <button 
-                onClick={() => setDeleteTargetId(null)}
-                className="px-4 py-2 border border-slate-300 text-slate-600 hover:text-slate-800 font-bold rounded-xl text-sm"
-              >
-                Batal
-              </button>
-              <button 
-                onClick={confirmDelete}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm"
-              >
-                Ya, Hapus Permanen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast message */}
-      {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#002B8F] text-white px-5 py-3 rounded-xl shadow-2xl font-bold text-sm">
-          <CheckCircle2 size={18} className="shrink-0" />
-          {toastMsg}
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        title="Hapus Transaksi?"
+        tone="danger"
+        confirmLabel="Ya, Hapus Permanen"
+        onCancel={() => setDeleteTargetId(null)}
+        onConfirm={confirmDelete}
+        description="Bon akan dihapus permanen dari database. Tindakan ini tidak dapat dibatalkan."
+      />
     </div>
   );
 }
