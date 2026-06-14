@@ -16,7 +16,23 @@ interface DashboardPageProps {
   onNavigate: (tab: string, options?: { openBonForm?: boolean }) => void;
 }
 
-const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
+const formatAmount = (n: number) => (Number.isFinite(n) ? n : 0).toLocaleString('id-ID');
+
+function KpiAmount({ value, tone }: { value: number; tone: 'blue' | 'emerald' | 'rose' | 'slate' }) {
+  const toneClass = {
+    blue: 'text-[#002B8F]',
+    emerald: 'text-emerald-600',
+    rose: 'text-rose-600',
+    slate: 'text-slate-800',
+  }[tone];
+
+  return (
+    <div className={`font-extrabold tracking-tight leading-none mt-1 min-w-0 ${toneClass}`}>
+      <div className="text-slate-400 font-bold text-[11px] mb-1">Rp</div>
+      <div className="text-[clamp(1.1rem,3.2vw,1.65rem)] break-all">{formatAmount(value)}</div>
+    </div>
+  );
+}
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { transactions, customers, setShowAddCustomer } = useStore();
@@ -59,7 +75,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       {/* KPI SUMMARY CARDS (Ramah Lansia: Huruf Sangat Besar, Kontras Tinggi) */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Piutang */}
-        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-[#002B8F] transition-all flex flex-col justify-between h-44">
+        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-[#002B8F] transition-all flex flex-col justify-between min-h-[11rem] overflow-hidden">
           <div className="flex items-start justify-between">
             <div className="p-3 bg-blue-50 text-[#002B8F] rounded-xl">
               <Wallet size={24} />
@@ -68,18 +84,16 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
               Piutang
             </span>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 min-w-0">
             <p className="text-[14px] font-bold text-slate-500 uppercase tracking-wide">
               Total Piutang
             </p>
-            <p className="text-[28px] font-extrabold text-[#002B8F] tracking-tight mt-1">
-              {formatRp(totalPiutang)}
-            </p>
+            <KpiAmount value={totalPiutang} tone="blue" />
           </div>
         </div>
 
         {/* Omzet Bulan Ini */}
-        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-emerald-600 transition-all flex flex-col justify-between h-44">
+        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-emerald-600 transition-all flex flex-col justify-between min-h-[11rem] overflow-hidden">
           <div className="flex items-start justify-between">
             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
               <TrendingUp size={24} />
@@ -88,18 +102,16 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
               Lunas (Omzet)
             </span>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 min-w-0">
             <p className="text-[14px] font-bold text-slate-500 uppercase tracking-wide">
               Omzet Bulan Ini
             </p>
-            <p className="text-[28px] font-extrabold text-emerald-600 tracking-tight mt-1">
-              {formatRp(omzetBulanIni)}
-            </p>
+            <KpiAmount value={omzetBulanIni} tone="emerald" />
           </div>
         </div>
 
         {/* Laba HL Bulan Ini */}
-        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-emerald-600 transition-all flex flex-col justify-between h-44">
+        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-emerald-600 transition-all flex flex-col justify-between min-h-[11rem] overflow-hidden">
           <div className="flex items-start justify-between">
             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
               <PiggyBank size={24} />
@@ -108,18 +120,16 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
               Lunas (Laba)
             </span>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 min-w-0">
             <p className="text-[14px] font-bold text-slate-500 uppercase tracking-wide">
               Laba HL Bulan Ini
             </p>
-            <p className="text-[28px] font-extrabold text-emerald-600 tracking-tight mt-1">
-              {formatRp(labaBulanIni)}
-            </p>
+            <KpiAmount value={labaBulanIni} tone={labaBulanIni < 0 ? 'rose' : 'emerald'} />
           </div>
         </div>
 
         {/* Pelanggan Aktif */}
-        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-slate-400 transition-all flex flex-col justify-between h-44">
+        <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-slate-400 transition-all flex flex-col justify-between min-h-[11rem] overflow-hidden">
           <div className="flex items-start justify-between">
             <div className="p-3 bg-slate-100 text-slate-600 rounded-xl">
               <Users size={24} />
@@ -128,11 +138,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
               Aktif
             </span>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 min-w-0">
             <p className="text-[14px] font-bold text-slate-500 uppercase tracking-wide">
               Pelanggan Aktif
             </p>
-            <p className="text-[28px] font-extrabold text-slate-800 tracking-tight mt-1">
+            <p className="text-[clamp(1.25rem,3.2vw,1.75rem)] font-extrabold text-slate-800 tracking-tight mt-1 leading-tight">
               {pelangganAktifCount} Orang
             </p>
           </div>
