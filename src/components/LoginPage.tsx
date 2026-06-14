@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Lock, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { checkLoginAllowed, recordFailedLogin, resetLoginAttempts } from '../lib/dataService';
+import { checkLoginAllowed, resetLoginAttempts } from '../lib/dataService';
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -41,8 +41,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      const fail = await recordFailedLogin(email);
-      setErrorMsg(fail.error ?? 'Kredensial salah.');
+      setErrorMsg('Kredensial salah.');
       setIsSubmitting(false);
       return;
     }

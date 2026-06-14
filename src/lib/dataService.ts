@@ -252,12 +252,6 @@ export async function checkLoginAllowed(email: string): Promise<{ allowed: boole
   return { allowed: data?.allowed ?? true, error: data?.error };
 }
 
-export async function recordFailedLogin(email: string): Promise<{ error?: string }> {
-  const { data, error } = await supabase.rpc('record_failed_login', { p_email: email });
-  if (error) return { error: error.message };
-  return { error: data?.error };
-}
-
 export async function resetLoginAttempts(email: string): Promise<void> {
   await supabase.rpc('reset_login_attempts', { p_email: email });
 }
