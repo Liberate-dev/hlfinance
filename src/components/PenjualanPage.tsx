@@ -182,8 +182,8 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
     const matchTipe = filterTipe === 'semua' || (filterTipe === 'bonus' ? t.is_bonus : !t.is_bonus);
     
     const parts = t.tanggal.split('-');
-    const matchMonth = filterMonth === 'semua' || parts[1] === filterMonth;
-    const matchYear = filterYear === 'semua' || parts[0] === filterYear;
+    const matchMonth = filterMode === 'bulan-ini' || filterMonth === 'semua' || parts[1] === filterMonth;
+    const matchYear = filterMode === 'bulan-ini' || filterYear === 'semua' || parts[0] === filterYear;
 
     return matchSearch && matchMode && matchStatus && matchTipe && matchMonth && matchYear;
   });
@@ -570,6 +570,8 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
             </select>
           </div>
 
+          {filterMode !== 'bulan-ini' && (
+            <>
           {/* Bulan Filter */}
           <div className="flex flex-col gap-1.5 min-w-[140px]">
             <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Bulan</label>
@@ -626,16 +628,24 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
               ))}
             </select>
           </div>
+            </>
+          )}
           
           {/* Reset Filters button */}
-          {(filterStatus !== 'semua' || filterTipe !== 'semua' || filterMonth !== 'semua' || filterYear !== 'semua') && (
+          {(filterStatus !== 'semua' || filterTipe !== 'semua' || searchQuery || (filterMode === 'semua' && (filterMonth !== 'semua' || filterYear !== 'semua'))) && (
             <button
               onClick={() => {
                 setFilterStatus('semua');
                 setFilterTipe('semua');
-                setFilterMonth('semua');
-                setFilterYear('semua');
-                setFilterMode('semua');
+                setSearchQuery('');
+                if (filterMode === 'bulan-ini') {
+                  const d = new Date();
+                  setFilterMonth(String(d.getMonth() + 1).padStart(2, '0'));
+                  setFilterYear(String(d.getFullYear()));
+                } else {
+                  setFilterMonth('semua');
+                  setFilterYear('semua');
+                }
                 setCurrentPage(1);
               }}
               className="px-4 py-2 border-2 border-slate-350 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm cursor-pointer transition-colors"
