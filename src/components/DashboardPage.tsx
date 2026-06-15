@@ -1,7 +1,7 @@
 import { 
   Wallet, 
   TrendingUp, 
-  PiggyBank, 
+  Banknote,
   Users, 
   FileText, 
   UserPlus, 
@@ -114,7 +114,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs hover:border-emerald-600 transition-all flex flex-col justify-between min-h-[11rem] overflow-hidden">
           <div className="flex items-start justify-between">
             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-              <PiggyBank size={24} />
+              <Banknote size={24} />
             </div>
             <span className="bg-emerald-100 text-emerald-800 text-sm font-bold px-3 py-1 rounded-full uppercase tracking-wide">
               Lunas (Laba)

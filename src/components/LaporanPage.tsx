@@ -317,7 +317,7 @@ export default function LaporanPage() {
       );
     } else {
       doc.text(
-        `Omzet Lunas: ${formatRp(metrics.omzetLunas)} | Laba HL: ${formatRp(metrics.labaHL)} | Sudah Dibayar: ${formatRp(metrics.terbayar)} | Piutang: ${formatRp(metrics.piutang)}`,
+        `Omzet Lunas: ${formatRp(metrics.omzetLunas)} | Laba HL: ${formatRp(metrics.labaHL)} | Sudah Dibayar: ${formatRp(metrics.terbayar)} | Belum bayar: ${formatRp(metrics.piutang)}`,
         20,
         y + 3
       );
@@ -327,13 +327,13 @@ export default function LaporanPage() {
     if (typeBreakdown) {
       doc.setFontSize(7);
       doc.text(
-        `LM — Omzet: ${formatRp(typeBreakdown.LM.omzetLunas)} | Laba: ${formatRp(typeBreakdown.LM.labaHL)} | Piutang: ${formatRp(typeBreakdown.LM.piutang)}`,
+        `LM — Omzet: ${formatRp(typeBreakdown.LM.omzetLunas)} | Laba: ${formatRp(typeBreakdown.LM.labaHL)} | Belum bayar: ${formatRp(typeBreakdown.LM.piutang)}`,
         20,
         y
       );
       y += 4;
       doc.text(
-        `BR — Omzet: ${formatRp(typeBreakdown.BR.omzetLunas)} | Laba: ${formatRp(typeBreakdown.BR.labaHL)} | Piutang: ${formatRp(typeBreakdown.BR.piutang)}`,
+        `BR — Omzet: ${formatRp(typeBreakdown.BR.omzetLunas)} | Laba: ${formatRp(typeBreakdown.BR.labaHL)} | Belum bayar: ${formatRp(typeBreakdown.BR.piutang)}`,
         20,
         y
       );
@@ -352,7 +352,7 @@ export default function LaporanPage() {
     } else {
       doc.text('OMZET', 90, y);
       doc.text('LABA', 118, y);
-      doc.text('PIUTANG', 145, y);
+      doc.text('BLM BYR', 143, y);
     }
     y += 5;
     doc.setDrawColor(200);
@@ -448,7 +448,7 @@ export default function LaporanPage() {
                               ? 'bg-amber-50 text-amber-700 border-2 border-amber-200'
                               : 'bg-rose-50 text-rose-700 border-2 border-rose-200'
                         }`}>
-                          {t.status === 'Open' ? 'Piutang' : t.status === 'Lunas' ? 'Lunas' : 'Batal'}
+                          {t.status === 'Open' ? 'Belum bayar' : t.status === 'Lunas' ? 'Lunas' : 'Batal'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm">
@@ -526,7 +526,7 @@ export default function LaporanPage() {
                                   ? 'bg-amber-50 text-amber-700 border-2 border-amber-200'
                                   : 'bg-rose-50 text-rose-700 border-2 border-rose-200'
                             }`}>
-                              {t.status === 'Open' ? 'Piutang' : t.status === 'Lunas' ? 'Lunas' : 'Batal'}
+                              {t.status === 'Open' ? 'Belum bayar' : t.status === 'Lunas' ? 'Lunas' : 'Batal'}
                             </span>
                           </td>
                         </tr>
@@ -568,7 +568,7 @@ export default function LaporanPage() {
       <div className="border-b-2 border-slate-200 pb-6">
         <h1 className="text-4xl font-black text-slate-900 tracking-tight">HL Laporan</h1>
         <p className="text-slate-600 text-lg font-bold mt-1.5 leading-relaxed">
-          Rekap omzet, laba, piutang, dan pembayaran per periode — sesuai AC-7.
+          Rekap omzet, laba, belum bayar, dan pembayaran per periode — sesuai AC-7.
         </p>
       </div>
 
@@ -804,16 +804,16 @@ export default function LaporanPage() {
               </div>
             </div>
 
-            {/* Piutang */}
+            {/* Belum bayar */}
             <div className="bg-amber-50/65 border-2 border-amber-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-amber-600 transition-colors">
               <div className="flex items-start justify-between">
                 <span className="bg-amber-200 text-amber-850 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-                  Outstanding
+                  Belum bayar
                 </span>
               </div>
               <div className="mt-3">
                 <p className="text-sm font-black text-amber-850/70 uppercase tracking-wide">
-                  Piutang {activeReportTab !== 'semua' && `(${activeReportTab})`}
+                  Belum bayar{activeReportTab !== 'semua' && ` (${activeReportTab})`}
                 </p>
                 <p className="text-[26px] font-black text-amber-900 tracking-tight mt-0.5">
                   {formatRp(metrics.piutang)}
@@ -854,7 +854,7 @@ export default function LaporanPage() {
                       <p className="font-black text-indigo-900">{formatRp(d.terbayar)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-600 uppercase">Piutang</p>
+                      <p className="text-sm text-slate-600 uppercase">Belum bayar</p>
                       <p className="font-black text-amber-900">{formatRp(d.piutang)}</p>
                     </div>
                   </div>
@@ -929,7 +929,7 @@ export default function LaporanPage() {
                         <p className="font-black text-emerald-800 text-lg mt-1">{formatRp(row.labaHL)}</p>
                       </div>
                       <div>
-                        <p className="font-bold text-slate-500">Piutang</p>
+                        <p className="font-bold text-slate-500">Belum bayar</p>
                         <p className="font-black text-amber-800 text-lg mt-1">{row.piutang > 0 ? formatRp(row.piutang) : '—'}</p>
                       </div>
                       <div>
@@ -968,7 +968,7 @@ export default function LaporanPage() {
                     <>
                       <th className="py-4 px-3 uppercase tracking-wider text-right">Omzet Lunas</th>
                       <th className="py-4 px-3 uppercase tracking-wider text-right">Laba HL</th>
-                      <th className="py-4 px-3 uppercase tracking-wider text-right">Piutang</th>
+                      <th className="py-4 px-3 text-right font-black">Belum bayar</th>
                       <th className="py-4 px-3 uppercase tracking-wider text-right">Sudah Dibayar</th>
                     </>
                   )}

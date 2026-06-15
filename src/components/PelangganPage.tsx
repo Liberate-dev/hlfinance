@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Search, 
@@ -13,7 +13,9 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  Check
+  Check,
+  Wand2,
+  PenLine,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 
@@ -82,6 +84,7 @@ const renderStatusBadge = (status: 'Open' | 'Lunas' | 'Cancelled' | string) => {
 };
 
 import { useStore } from '../store/useStore';
+import { generateCustomerKode } from '../lib/customerCode';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { toast } from './ui/AppToast';
 
@@ -126,11 +129,15 @@ export default function PelangganPage() {
   const [addCustomerForm, setAddCustomerForm] = useState<any | null>(null);
   const [newLmDiscountAdd, setNewLmDiscountAdd] = useState<string>('');
   const [newBrDiscountAdd, setNewBrDiscountAdd] = useState<string>('');
+  const [kodeModeAdd, setKodeModeAdd] = useState<'otomatis' | 'manual'>('otomatis');
+
+  const autoCustomerKode = useMemo(() => generateCustomerKode(customers), [customers]);
 
   const startAddCustomerForm = () => {
+    setKodeModeAdd('otomatis');
     setAddCustomerForm({
       id: '',
-      kode: '',
+      kode: autoCustomerKode,
       nama: '',
       diskon_lm: [],
       diskon_br: [],
@@ -152,6 +159,14 @@ export default function PelangganPage() {
       setShowAddCustomer(false);
     }
   }, [showAddCustomer, setShowAddCustomer]);
+
+  useEffect(() => {
+    if (!isAddingCustomer || kodeModeAdd !== 'otomatis') return;
+    setAddCustomerForm((prev) => {
+      if (!prev || prev.kode === autoCustomerKode) return prev;
+      return { ...prev, kode: autoCustomerKode };
+    });
+  }, [isAddingCustomer, kodeModeAdd, autoCustomerKode]);
 
   // State Filter Bulan & Tahun (Maksimal s/d Bulan & Tahun Saat Ini)
   const today = new Date();
@@ -285,12 +300,16 @@ export default function PelangganPage() {
       notifyError("Nama pelanggan tidak boleh kosong!");
       return;
     }
-    if (!addCustomerForm.kode.trim()) {
+    const kodeToSave = kodeModeAdd === 'otomatis'
+      ? generateCustomerKode(customers)
+      : addCustomerForm.kode.trim();
+
+    if (!kodeToSave) {
       notifyError("Kode pelanggan tidak boleh kosong!");
       return;
     }
     const isDuplicate = customers.some(
-      c => c.kode.toLowerCase() === addCustomerForm.kode.trim().toLowerCase()
+      c => c.kode.toLowerCase() === kodeToSave.toLowerCase()
     );
     if (isDuplicate) {
       notifyError("Kode pelanggan sudah digunakan oleh pelanggan lain!");
@@ -298,7 +317,7 @@ export default function PelangganPage() {
     }
 
     const err = await addCustomer({
-      kode: addCustomerForm.kode.trim(),
+      kode: kodeToSave,
       nama: addCustomerForm.nama.trim(),
       diskon_lm: addCustomerForm.diskon_lm,
       diskon_br: addCustomerForm.diskon_br,
@@ -411,19 +430,58 @@ export default function PelangganPage() {
                   <div className="grid gap-6 sm:grid-cols-2 text-lg">
                     {/* Kode Pelanggan */}
                     <div className="space-y-2.5">
-                      <label htmlFor="new-cust-code" className="block text-base font-extrabold text-slate-600 uppercase tracking-wide">
-                        Kode Pelanggan (Wajib & Unik)
+                      <label className="block text-base font-extrabold text-slate-600 uppercase tracking-wide">
+                        Kode Pelanggan
                       </label>
-                      <input
-                        id="new-cust-code"
-                        type="text"
-                        maxLength={10}
-                        placeholder="Contoh: HL-C07"
-                        value={addCustomerForm.kode}
-                        onChange={(e) => setAddCustomerForm(prev => prev ? { ...prev, kode: e.target.value } : null)}
-                        className="w-full p-4 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xl font-bold text-slate-900 focus:outline-none focus:border-[#002B8F] focus:ring-4 focus:ring-[#002B8F]/10 focus:bg-white transition-all shadow-sm"
-                        style={{ minHeight: '56px' }}
-                      />
+                      <div className="flex gap-2.5 mb-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setKodeModeAdd('otomatis');
+                            setAddCustomerForm((prev) => prev ? { ...prev, kode: autoCustomerKode } : null);
+                          }}
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-bold transition-all cursor-pointer min-h-[44px] ${
+                            kodeModeAdd === 'otomatis'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Wand2 size={16} />
+                          Otomatis
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setKodeModeAdd('manual')}
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-bold transition-all cursor-pointer min-h-[44px] ${
+                            kodeModeAdd === 'manual'
+                              ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <PenLine size={16} />
+                          Isi sendiri
+                        </button>
+                      </div>
+                      {kodeModeAdd === 'otomatis' ? (
+                        <div className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl">
+                          <Wand2 size={24} className="text-blue-600 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">Kode Otomatis</p>
+                            <p id="new-cust-code" className="text-xl font-black text-[#002B8F] font-mono mt-0.5">{autoCustomerKode}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <input
+                          id="new-cust-code"
+                          type="text"
+                          maxLength={10}
+                          placeholder="Contoh: HL-C07"
+                          value={addCustomerForm.kode}
+                          onChange={(e) => setAddCustomerForm((prev) => prev ? { ...prev, kode: e.target.value.toUpperCase() } : null)}
+                          className="w-full p-4 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xl font-bold text-slate-900 font-mono focus:outline-none focus:border-[#002B8F] focus:ring-4 focus:ring-[#002B8F]/10 focus:bg-white transition-all shadow-sm"
+                          style={{ minHeight: '56px' }}
+                        />
+                      )}
                     </div>
 
                     {/* Nama Pelanggan */}
@@ -714,7 +772,7 @@ export default function PelangganPage() {
                         <p className="font-extrabold text-slate-900 text-xl mt-1">{c.nama}</p>
                         {isEligible && (
                           <span className="inline-flex items-center gap-1 mt-2 bg-amber-100 text-amber-900 text-xs font-extrabold px-3 py-1.5 rounded-full border border-amber-300 uppercase">
-                            <Award size={13} className="text-amber-600" /> Bonus Layak
+                            <Award size={13} className="text-amber-600" /> Layak Bonus
                           </span>
                         )}
                       </div>
@@ -790,7 +848,7 @@ export default function PelangganPage() {
                               <span className="font-extrabold text-slate-900 text-lg">{c.nama}</span>
                               {isEligible && (
                                 <span className="bg-amber-100 text-amber-900 text-xs font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border border-amber-300 uppercase tracking-wider shadow-sm">
-                                  <Award size={13} className="text-amber-600" /> Bonus Layak
+                                  <Award size={13} className="text-amber-600" /> Layak Bonus
                                 </span>
                               )}
                             </div>
@@ -912,7 +970,7 @@ export default function PelangganPage() {
                           {line.productName}
                         </h4>
                         <p className="text-sm font-bold text-slate-500 mt-1.5 uppercase tracking-wider">
-                          Tipe: {line.tipe} | Diskon: {line.diskon.join('% + ')}% (Cascading)
+                          Tipe: {line.tipe} | Diskon: {line.diskon.join('% + ')}%
                         </p>
                       </div>
                       <span className="bg-blue-50 text-[#002B8F] text-base font-extrabold px-4 py-2 rounded-xl border border-blue-200/50 shrink-0">
@@ -1327,7 +1385,7 @@ export default function PelangganPage() {
               
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                 <div>
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Diskon LM (Cascading)</p>
+                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Diskon LM</p>
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {activeCustomer?.diskon_lm.map((d, i) => (
                       <span key={i} className="bg-blue-50 text-[#002B8F] text-xs font-extrabold px-2 py-0.5 rounded border border-blue-100/50">
@@ -1337,7 +1395,7 @@ export default function PelangganPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Diskon BR (Cascading)</p>
+                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Diskon BR</p>
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {activeCustomer?.diskon_br.map((d, i) => (
                       <span key={i} className="bg-emerald-50 text-emerald-800 text-xs font-extrabold px-2 py-0.5 rounded border border-emerald-100/50">
