@@ -137,6 +137,10 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   deleteCustomer: async (id) => {
+    const hasHistory = get().transactions.some((t) => t.customer_id === id);
+    if (hasHistory) {
+      return 'Pelanggan dengan riwayat transaksi tidak dapat dihapus.';
+    }
     const { error } = await api.softDeleteCustomer(id);
     if (error) return error;
     return get().refreshAfterMutation();
@@ -198,7 +202,9 @@ export const useStore = create<StoreState>((set, get) => ({
 
   deleteTransaction: async (id) => {
     const tx = get().transactions.find((t) => t.id === id);
-    if (tx && tx.status !== 'Open') return 'Hanya bon Open yang dapat dihapus.';
+    if (tx && tx.status !== 'Cancelled') {
+      return 'Hanya bon berstatus Batal yang dapat dihapus. Batalkan bon terlebih dahulu.';
+    }
     const { error } = await api.deleteBonOpen(id);
     if (error) return error;
     return get().refreshAfterMutation();

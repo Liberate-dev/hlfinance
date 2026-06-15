@@ -53,6 +53,18 @@ h1, h2, h3, h4, h5, h6 {
   animation: float 6s ease-in-out infinite;
 }
 
+/* Nominal inputs: no browser number spinners, no scroll-to-change */
+.nominal-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.nominal-input::-webkit-outer-spin-button,
+.nominal-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Glassmorphism utility */
 .glass-card {
   background: rgba(255, 255, 255, 0.85);

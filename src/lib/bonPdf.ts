@@ -41,7 +41,7 @@ function formatDatePdf(dateStr?: string): string {
 function statusLabel(status: BonPdfInput['status']): string {
   if (status === 'Lunas') return 'LUNAS';
   if (status === 'Cancelled') return 'DIBATALKAN';
-  return 'PIUTANG (OPEN)';
+  return 'PIUTANG';
 }
 
 export function bonToPdfInput(bon: Bon, customerAlamat?: string): BonPdfInput {

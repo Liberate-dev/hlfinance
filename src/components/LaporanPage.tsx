@@ -6,6 +6,181 @@ import { activeTransactions } from '../lib/activeData';
 
 const formatRp = (n: number) => 'Rp ' + (Number.isFinite(n) ? n : 0).toLocaleString('id-ID');
 
+const PDF_BRAND = { r: 0, g: 43, b: 143 };
+const PDF_MARGIN = 15;
+
+type PdfKpiItem = { label: string; value: string; tone?: 'default' | 'negative' | 'warning' };
+
+function drawLaporanHeader(doc: import('jspdf').jsPDF, pageWidth: number, periodStr: string): number {
+  const headerH = 24;
+  doc.setFillColor(PDF_BRAND.r, PDF_BRAND.g, PDF_BRAND.b);
+  doc.rect(0, 0, pageWidth, headerH, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text('HL FINANCE', PDF_MARGIN, 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Rekapitulasi & Pelaporan Keuangan Bulanan', PDF_MARGIN, 16);
+
+  doc.setFontSize(7);
+  doc.setTextColor(190, 215, 250);
+  doc.text('PERIODE', pageWidth - PDF_MARGIN, 8, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(periodStr.toUpperCase(), pageWidth - PDF_MARGIN, 13.5, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(190, 215, 250);
+  doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, pageWidth - PDF_MARGIN, 19, { align: 'right' });
+
+  return headerH + 6;
+}
+
+function drawKpiGrid(doc: import('jspdf').jsPDF, pageWidth: number, y: number, items: PdfKpiItem[]): number {
+  const contentW = pageWidth - PDF_MARGIN * 2;
+  const gap = 3;
+  const boxW = (contentW - gap * (items.length - 1)) / items.length;
+  const boxH = 17;
+
+  items.forEach((item, i) => {
+    const x = PDF_MARGIN + i * (boxW + gap);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(x, y, boxW, boxH, 1.5, 1.5, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(item.label.toUpperCase(), x + 3, y + 6);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    if (item.tone === 'negative') doc.setTextColor(185, 28, 28);
+    else if (item.tone === 'warning') doc.setTextColor(180, 83, 9);
+    else doc.setTextColor(15, 23, 42);
+
+    const valueLines = doc.splitTextToSize(item.value, boxW - 6);
+    doc.text(valueLines[0] || item.value, x + 3, y + 12.5);
+  });
+
+  return y + boxH + 5;
+}
+
+function drawTypeBreakdownPdf(
+  doc: import('jspdf').jsPDF,
+  pageWidth: number,
+  y: number,
+  breakdown: { LM: TxFinancials; BR: TxFinancials }
+): number {
+  const contentW = pageWidth - PDF_MARGIN * 2;
+  const gap = 4;
+  const boxW = (contentW - gap) / 2;
+  const boxH = 24;
+
+  const drawBox = (
+    x: number,
+    title: string,
+    data: TxFinancials,
+    accent: [number, number, number]
+  ) => {
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(accent[0], accent[1], accent[2]);
+    doc.roundedRect(x, y, boxW, boxH, 1.5, 1.5, 'FD');
+    doc.setFillColor(accent[0], accent[1], accent[2]);
+    doc.rect(x, y, boxW, 6.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(title, x + 3, y + 4.5);
+
+    const rows: [string, string, 'default' | 'negative' | 'warning'][] = [
+      ['Omzet Lunas', formatRp(data.omzetLunas), 'default'],
+      ['Laba HL', formatRp(data.labaHL), data.labaHL < 0 ? 'negative' : 'default'],
+      ['Belum bayar', formatRp(data.piutang), data.piutang > 0 ? 'warning' : 'default'],
+    ];
+
+    let rowY = y + 11;
+    rows.forEach(([label, value, tone]) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(label, x + 3, rowY);
+      doc.setFont('helvetica', 'bold');
+      if (tone === 'negative') doc.setTextColor(185, 28, 28);
+      else if (tone === 'warning') doc.setTextColor(180, 83, 9);
+      else doc.setTextColor(15, 23, 42);
+      doc.text(value, x + boxW - 3, rowY, { align: 'right' });
+      rowY += 5;
+    });
+  };
+
+  drawBox(PDF_MARGIN, 'LM', breakdown.LM, [0, 43, 143]);
+  drawBox(PDF_MARGIN + boxW + gap, 'BR', breakdown.BR, [5, 150, 105]);
+
+  return y + boxH + 6;
+}
+
+const PDF_TABLE_ROW_H = 6;
+const PDF_TABLE_HEADER_H = 8;
+
+type PdfTableCols = {
+  no: number;
+  pelanggan: number;
+  pelangganMaxW: number;
+  transaksiRight: number;
+  omzetRight: number;
+  labaRight: number;
+  belumBayarRight: number;
+};
+
+function getPdfTableCols(pageWidth: number): PdfTableCols {
+  const pad = 4;
+  const left = PDF_MARGIN + pad;
+  const right = pageWidth - PDF_MARGIN - pad;
+  const pelangganEnd = left + 56;
+  return {
+    no: left + 2,
+    pelanggan: left + 10,
+    pelangganMaxW: 52,
+    transaksiRight: pelangganEnd + 14,
+    omzetRight: pelangganEnd + 44,
+    labaRight: pelangganEnd + 74,
+    belumBayarRight: right,
+  };
+}
+
+function drawPdfTableHeader(
+  doc: import('jspdf').jsPDF,
+  pageWidth: number,
+  y: number,
+  cols: PdfTableCols,
+  isBonus: boolean
+): number {
+  doc.setFillColor(PDF_BRAND.r, PDF_BRAND.g, PDF_BRAND.b);
+  doc.rect(PDF_MARGIN, y, pageWidth - PDF_MARGIN * 2, PDF_TABLE_HEADER_H, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(255, 255, 255);
+  const hy = y + 5.2;
+  doc.text('NO', cols.no, hy);
+  doc.text('PELANGGAN', cols.pelanggan, hy);
+  if (isBonus) {
+    doc.text('TRANSAKSI', cols.transaksiRight, hy, { align: 'right' });
+    doc.text('UNIT', cols.omzetRight, hy, { align: 'right' });
+    doc.text('SUBSIDI', cols.belumBayarRight, hy, { align: 'right' });
+  } else {
+    doc.text('TRANSAKSI', cols.transaksiRight, hy, { align: 'right' });
+    doc.text('OMZET', cols.omzetRight, hy, { align: 'right' });
+    doc.text('LABA', cols.labaRight, hy, { align: 'right' });
+    doc.text('BELUM BAYAR', cols.belumBayarRight, hy, { align: 'right' });
+  }
+  return y + PDF_TABLE_HEADER_H;
+}
+
 const getCurrentMonthYearLabel = () => {
   const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const d = new Date();
@@ -26,6 +201,27 @@ const MONTH_OPTIONS = [
   { v: '11', l: 'November', num: 11 },
   { v: '12', l: 'Desember', num: 12 },
 ] as const;
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const;
+
+function formatMonthYearShort(yearMonth: string): string {
+  const [year, month] = yearMonth.split('-');
+  const m = parseInt(month, 10);
+  if (!year || !m || m < 1 || m > 12) return yearMonth;
+  return `${MONTH_SHORT[m - 1]} ${year}`;
+}
+
+function getDataPeriodRange(transactions: Bon[]): string | null {
+  const yearMonths = transactions
+    .map(t => t.tanggal?.slice(0, 7))
+    .filter((ym): ym is string => !!ym)
+    .sort();
+  if (yearMonths.length === 0) return null;
+  const min = yearMonths[0];
+  const max = yearMonths[yearMonths.length - 1];
+  if (min === max) return formatMonthYearShort(min);
+  return `${formatMonthYearShort(min)} - ${formatMonthYearShort(max)}`;
+}
 
 type ReportTab = 'semua' | 'LM' | 'BR' | 'bonus';
 type TipeFilter = 'semua' | 'LM' | 'BR';
@@ -123,21 +319,6 @@ export default function LaporanPage() {
 
   const currentMonthYear = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
 
-  // Dinamis generate label periode laporan (Sangat jelas untuk orang tua)
-  const periodLabel = useMemo(() => {
-    if (filterMode === 'bulan-ini') return getCurrentMonthYearLabel();
-
-    const monthLabel = filterMonth === 'semua'
-      ? 'Semua Bulan'
-      : (MONTH_OPTIONS.find(m => m.v === filterMonth)?.l || '');
-    const yearLabel = filterYear === 'semua' ? 'Semua Tahun' : filterYear;
-
-    if (filterMonth === 'semua' && filterYear === 'semua') return 'Semua Periode';
-    if (filterMonth === 'semua') return `Tahun ${yearLabel}`;
-    if (filterYear === 'semua') return `Bulan ${monthLabel} (Semua Tahun)`;
-    return `${monthLabel} ${yearLabel}`;
-  }, [filterMode, filterMonth, filterYear]);
-
   const reportTabLabel = useMemo(() => {
     const labels: Record<ReportTab, string> = {
       semua: 'Keseluruhan (LM + BR)',
@@ -161,6 +342,22 @@ export default function LaporanPage() {
       return matchMode && matchMonth && matchYear;
     });
   }, [transactions, filterMode, filterMonth, filterYear, currentMonthYear]);
+
+  const periodLabel = useMemo(() => {
+    if (filterMode === 'bulan-ini') return getCurrentMonthYearLabel();
+
+    const monthLabel = filterMonth === 'semua'
+      ? 'Semua Bulan'
+      : (MONTH_OPTIONS.find(m => m.v === filterMonth)?.l || '');
+    const yearLabel = filterYear === 'semua' ? 'Semua Tahun' : filterYear;
+
+    if (filterMonth === 'semua' && filterYear === 'semua') {
+      return getDataPeriodRange(monthTransactions) ?? 'Belum ada data';
+    }
+    if (filterMonth === 'semua') return `Tahun ${yearLabel}`;
+    if (filterYear === 'semua') return `Bulan ${monthLabel} (Semua Tahun)`;
+    return `${monthLabel} ${yearLabel}`;
+  }, [filterMode, filterMonth, filterYear, monthTransactions]);
 
   // Transaksi bonus saja
   const bonusTransactions = useMemo(() => {
@@ -303,105 +500,106 @@ export default function LaporanPage() {
     const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    let y = 15;
-
-    const reportTitle = activeReportTab === 'bonus' 
-      ? 'LAPORAN DATA KLAIM BONUS PELANGGAN' 
-      : `LAPORAN KEUANGAN HL FINANCE - ${activeReportTab === 'semua' ? 'KESELURUHAN' : activeReportTab.toUpperCase()}`;
     const periodStr = periodLabel;
 
-    // Header
-    doc.setFillColor(0, 43, 143);
-    doc.rect(15, y - 5, pageWidth - 30, 16, 'F');
-    doc.setTextColor(255);
-    doc.setFontSize(12);
-    doc.text('HL FINANCE', 20, y + 2);
-    doc.setFontSize(8);
-    doc.text('Rekapitulasi & Pelaporan Keuangan Bulanan', 20, y + 8);
-    doc.setTextColor(0);
-    doc.text(`Periode: ${periodStr.toUpperCase()}`, pageWidth - 20, y, { align: 'right' });
-    doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, pageWidth - 20, y + 5, { align: 'right' });
-    y += 18;
+    const reportTitle = activeReportTab === 'bonus'
+      ? 'Laporan Data Klaim Bonus Pelanggan'
+      : activeReportTab === 'semua'
+        ? 'Laporan Keuangan'
+        : `Laporan Keuangan — ${activeReportTab}`;
 
-    doc.setFontSize(10);
-    doc.text(reportTitle, 20, y);
-    y += 5;
+    let y = drawLaporanHeader(doc, pageWidth, periodStr);
 
-    // KPI summary box
-    doc.setFillColor(248, 250, 252);
-    doc.rect(15, y - 3, pageWidth - 30, 10, 'F');
-    doc.setFontSize(8);
-    if (activeReportTab === 'bonus') {
-      doc.text(
-        `Klaim: ${metrics.terbayar} | Unit: ${metrics.piutang} | Subsidi: ${formatRp(metrics.totalSubsidi)} | Pelanggan: ${metrics.pelangganKlaim}`,
-        20,
-        y + 3
-      );
-    } else {
-      doc.text(
-        `Omzet Lunas: ${formatRp(metrics.omzetLunas)} | Laba HL: ${formatRp(metrics.labaHL)} | Sudah Dibayar: ${formatRp(metrics.terbayar)} | Belum bayar: ${formatRp(metrics.piutang)}`,
-        20,
-        y + 3
-      );
-    }
-    y += 12;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(reportTitle, PDF_MARGIN, y);
+    y += 8;
+
+    const kpiItems: PdfKpiItem[] = activeReportTab === 'bonus'
+      ? [
+          { label: 'Total Klaim', value: String(metrics.terbayar) },
+          { label: 'Unit Bonus', value: String(metrics.piutang) },
+          { label: 'Subsidi', value: formatRp(metrics.totalSubsidi) },
+          { label: 'Pelanggan', value: `${metrics.pelangganKlaim} org` },
+        ]
+      : [
+          { label: 'Omzet Lunas', value: formatRp(metrics.omzetLunas) },
+          { label: 'Laba HL', value: formatRp(metrics.labaHL), tone: metrics.labaHL < 0 ? 'negative' : 'default' },
+          { label: 'Sudah Dibayar', value: formatRp(metrics.terbayar) },
+          { label: 'Belum bayar', value: formatRp(metrics.piutang), tone: metrics.piutang > 0 ? 'warning' : 'default' },
+        ];
+    y = drawKpiGrid(doc, pageWidth, y, kpiItems);
 
     if (typeBreakdown) {
-      doc.setFontSize(7);
-      doc.text(
-        `LM — Omzet: ${formatRp(typeBreakdown.LM.omzetLunas)} | Laba: ${formatRp(typeBreakdown.LM.labaHL)} | Belum bayar: ${formatRp(typeBreakdown.LM.piutang)}`,
-        20,
-        y
-      );
-      y += 4;
-      doc.text(
-        `BR — Omzet: ${formatRp(typeBreakdown.BR.omzetLunas)} | Laba: ${formatRp(typeBreakdown.BR.labaHL)} | Belum bayar: ${formatRp(typeBreakdown.BR.piutang)}`,
-        20,
-        y
-      );
-      y += 8;
+      y = drawTypeBreakdownPdf(doc, pageWidth, y, typeBreakdown);
     }
 
-    doc.setFontSize(7);
-    doc.setFillColor(240, 244, 249);
-    doc.rect(15, y - 4, pageWidth - 30, 6, 'F');
-    doc.text('NO', 17, y);
-    doc.text('PELANGGAN', 28, y);
-    doc.text('TRX', 78, y);
-    if (activeReportTab === 'bonus') {
-      doc.text('UNIT', 95, y);
-      doc.text('SUBSIDI', 130, y);
-    } else {
-      doc.text('OMZET', 90, y);
-      doc.text('LABA', 118, y);
-      doc.text('BLM BYR', 143, y);
+    const cols = getPdfTableCols(pageWidth);
+    const isBonus = activeReportTab === 'bonus';
+
+    if (y > 235) {
+      doc.addPage();
+      y = PDF_MARGIN;
     }
+
+    y += 2;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(51, 65, 85);
+    doc.text('Rincian Pelanggan', PDF_MARGIN, y);
     y += 5;
-    doc.setDrawColor(200);
-    doc.line(15, y, pageWidth - 15, y);
-    y += 4;
+
+    y = drawPdfTableHeader(doc, pageWidth, y, cols, isBonus);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 41, 59);
 
     customerPerformance.slice(0, 28).forEach((row, idx) => {
-      doc.text(String(idx + 1), 17, y);
-      doc.text(`${row.customer.nama} (${row.customer.kode})`.substring(0, 28), 28, y);
-      doc.text(`${row.totalTransaksi}x`, 78, y);
-      if (activeReportTab === 'bonus') {
-        doc.text(`${row.unitBonus}`, 95, y);
-        doc.text(formatRp(row.subsidi), 130, y);
-      } else {
-        doc.text(formatRp(row.omzetLunas), 90, y);
-        doc.text(formatRp(row.labaHL), 118, y);
-        doc.text(formatRp(row.piutang), 145, y);
+      if (y + PDF_TABLE_ROW_H > 280) {
+        doc.addPage();
+        y = PDF_MARGIN;
+        y = drawPdfTableHeader(doc, pageWidth, y, cols, isBonus);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(30, 41, 59);
       }
-      y += 4.5;
-      if (y > 265) { doc.addPage(); y = 20; }
+
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(PDF_MARGIN, y, pageWidth - PDF_MARGIN * 2, PDF_TABLE_ROW_H, 'F');
+      }
+
+      const textY = y + 4.2;
+      doc.setFontSize(6.5);
+      doc.text(String(idx + 1), cols.no, textY);
+
+      const pelangganLabel = `${row.customer.nama} (${row.customer.kode})`;
+      const pelangganLines = doc.splitTextToSize(pelangganLabel, cols.pelangganMaxW);
+      doc.text(pelangganLines[0] || pelangganLabel, cols.pelanggan, textY);
+
+      doc.setFontSize(6.2);
+      if (isBonus) {
+        doc.text(`${row.totalTransaksi}x`, cols.transaksiRight, textY, { align: 'right' });
+        doc.text(String(row.unitBonus), cols.omzetRight, textY, { align: 'right' });
+        doc.text(formatRp(row.subsidi), cols.belumBayarRight, textY, { align: 'right' });
+      } else {
+        doc.text(`${row.totalTransaksi}x`, cols.transaksiRight, textY, { align: 'right' });
+        doc.text(formatRp(row.omzetLunas), cols.omzetRight, textY, { align: 'right' });
+        if (row.labaHL < 0) doc.setTextColor(185, 28, 28);
+        doc.text(formatRp(row.labaHL), cols.labaRight, textY, { align: 'right' });
+        doc.setTextColor(30, 41, 59);
+        doc.text(formatRp(row.piutang), cols.belumBayarRight, textY, { align: 'right' });
+      }
+
+      y += PDF_TABLE_ROW_H;
     });
 
     y += 4;
-    doc.line(15, y, pageWidth - 15, y);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(PDF_MARGIN, y, pageWidth - PDF_MARGIN, y);
     y += 6;
     doc.setFontSize(7);
-    doc.text('Laporan resmi - Sistem HL Finance (Cash Basis, no PPN)', 20, y);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Laporan resmi — Sistem HL Finance (Cash Basis, tanpa PPN)', PDF_MARGIN, y);
 
     doc.save(`Laporan-HL-${periodStr.replace(/[^A-Za-z0-9]/g, '')}-${activeReportTab}.pdf`);
   };

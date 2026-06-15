@@ -11,6 +11,7 @@ import ForgotPasswordPage from './components/ForgotPasswordPage';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useStore } from './store/useStore';
 import AppToastHost from './components/ui/AppToast';
+import { scrollToAppTop } from './lib/scrollToAppTop';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -35,6 +36,10 @@ function App() {
     setPenjualanStartInAdd(false);
     setActiveTab(tab);
   };
+
+  useEffect(() => {
+    scrollToAppTop();
+  }, [activeTab]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {

@@ -108,11 +108,19 @@ export async function updateCustomerRow(
 }
 
 export async function softDeleteCustomer(id: string): Promise<{ error?: string }> {
-  const { error } = await supabase
-    .from('customers')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id);
-  return error ? { error: error.message } : {};
+  const { data, error } = await supabase.rpc('soft_delete_customer', { p_id: id });
+  if (error) {
+    return {
+      error: isAdminMigrationMissingError(error.message)
+        ? 'Migrasi aturan hapus belum dijalankan. Jalankan supabase/sql-editor/10_delete_rules.sql.'
+        : error.message,
+    };
+  }
+  const result = data as { success?: boolean; error?: string };
+  if (!result?.success) {
+    return { error: result?.error ?? 'Gagal menghapus pelanggan.' };
+  }
+  return {};
 }
 
 export async function insertProduct(

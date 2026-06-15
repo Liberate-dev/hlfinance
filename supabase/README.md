@@ -21,6 +21,7 @@ Jalankan berurutan dari folder **`sql-editor/`** (lebih aman, per step):
 8. `07_security_hardening.sql` atau `../migrations/20240614000001_security_hardening.sql` (lockout login)
 9. `08_admin_settings.sql` atau `../migrations/20240615000001_admin_settings.sql` (**wajib** untuk menu Admin & lupa sandi)
 10. `09_transaction_soft_delete.sql` atau `../migrations/20240616000001_transaction_soft_delete.sql` (**wajib** untuk hapus/pulihkan bon)
+11. `10_delete_rules.sql` atau `../migrations/20240617000001_delete_rules.sql` (aturan hapus pelanggan & bon batal)
 
 Cara copy yang benar: buka file di VS Code/Cursor → Ctrl+A → Ctrl+C → paste ke SQL Editor.
 

@@ -16,8 +16,12 @@ import {
   Check,
   Wand2,
   PenLine,
+  Printer,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { bonToPdfInput, downloadBonPdf } from '../lib/bonPdf';
+import BonDetailView from './BonDetailView';
+import { scrollToAppTop } from '../lib/scrollToAppTop';
 
 const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 
@@ -77,16 +81,18 @@ const renderStatusBadge = (status: 'Open' | 'Lunas' | 'Cancelled' | string) => {
       return (
         <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold bg-amber-50 text-amber-800 border border-amber-200">
           <Clock size={16} className="text-amber-600 stroke-[2.5]" />
-          <span>Belum Lunas</span>
+          <span>Piutang</span>
         </span>
       );
   }
 };
 
 import { useStore } from '../store/useStore';
+import type { Bon } from '../store/useStore';
 import { activeTransactions } from '../lib/activeData';
 import { generateCustomerKode } from '../lib/customerCode';
 import ConfirmDialog from './ui/ConfirmDialog';
+import NominalInput from './ui/NominalInput';
 import { toast } from './ui/AppToast';
 
 export default function PelangganPage() {
@@ -117,7 +123,11 @@ export default function PelangganPage() {
   const [settleDate, setSettleDate] = useState(new Date().toISOString().split('T')[0]);
   
   // State Detail Bon Modal
-  const [activeBonDetail, setActiveBonDetail] = useState<any | null>(null);
+  const [activeBonDetail, setActiveBonDetail] = useState<Bon | null>(null);
+
+  useEffect(() => {
+    scrollToAppTop();
+  }, [selectedCustomerId, activeBonDetail]);
 
   // State Edit Pelanggan Halaman
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
@@ -260,13 +270,13 @@ export default function PelangganPage() {
       const err = await settleTransaction(targetBonId, settleDate);
       if (err) { notifyError(err); return; }
       if (activeBonDetail && activeBonDetail.id === targetBonId) {
-        setActiveBonDetail((prev: any) => prev ? { ...prev, status: 'Lunas', tanggal_lunas: settleDate } : null);
+        setActiveBonDetail((prev) => prev ? { ...prev, status: 'Lunas', tanggal_lunas: settleDate } : null);
       }
       showSuccess(`Bon berhasil dilunasi pada tanggal ${settleDate}!`);
     } else if (settleMode === 'bulk' && selectedCustomerId) {
       const err = await settleBulkTransactions(selectedCustomerId, selectedYearMonth, settleDate);
       if (err) { notifyError(err); return; }
-      showSuccess(`Semua tagihan Open bulan ini berhasil dilunasi pada tanggal ${settleDate}!`);
+      showSuccess(`Semua tagihan Piutang bulan ini berhasil dilunasi pada tanggal ${settleDate}!`);
     }
     setShowSettleModal(false);
   };
@@ -524,11 +534,10 @@ export default function PelangganPage() {
                       <label htmlFor="new-cust-threshold" className="block text-base font-extrabold text-slate-600 uppercase tracking-wide">
                         Ambang Batas Bonus (Rp)
                       </label>
-                      <input
+                      <NominalInput
                         id="new-cust-threshold"
-                        type="number"
                         value={addCustomerForm.threshold_bonus}
-                        onChange={(e) => setAddCustomerForm(prev => prev ? { ...prev, threshold_bonus: Number(e.target.value) } : null)}
+                        onChange={(v) => setAddCustomerForm(prev => prev ? { ...prev, threshold_bonus: v } : null)}
                         className="w-full p-4 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xl font-bold text-slate-900 focus:outline-none focus:border-[#002B8F] focus:ring-4 focus:ring-[#002B8F]/10 focus:bg-white transition-all shadow-sm"
                         style={{ minHeight: '56px' }}
                       />
@@ -910,132 +919,47 @@ export default function PelangganPage() {
           </div>
         )
       ) : activeBonDetail ? (
-        /* TAMPILAN 3: HALAMAN DETAIL BON TRANSAKSI (BARU - RAMAH LANSIA) */
         <div className="space-y-6 animate-fade-in">
-          {/* Header Kembali */}
-          <div className="flex items-center border-b border-slate-200 pb-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-4 flex-wrap gap-3">
             <button
               onClick={() => setActiveBonDetail(null)}
-              className="flex items-center space-x-2.5 text-slate-650 hover:text-slate-900 font-extrabold text-lg transition-colors cursor-pointer"
+              className="flex items-center gap-2 text-slate-600 hover:text-[#002B8F] font-bold text-lg transition-colors cursor-pointer"
               style={{ minHeight: '48px' }}
             >
               <ArrowLeft size={22} className="stroke-[2.5]" />
               <span>Kembali ke Transaksi Pelanggan</span>
             </button>
-          </div>
 
-          {/* Info Utama Bon */}
-          <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-8 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-slate-100 pb-6">
-              <div>
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Nomor Bon</p>
-                <h2 className="text-3xl font-black text-[#002B8F] tracking-tight mt-1">
-                  {activeBonDetail.nomor_bon}
-                </h2>
-              </div>
-              <div className="scale-110 origin-top-left sm:origin-top-right pt-2">
-                {renderStatusBadge(activeBonDetail.status)}
-              </div>
-            </div>
-
-            <div className="grid gap-6 sm:grid-cols-2">
-              <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl">
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Tanggal Transaksi</p>
-                <p className="font-extrabold text-slate-800 text-xl mt-1.5">
-                  {new Date(activeBonDetail.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-                </p>
-              </div>
-              {activeBonDetail.tanggal_lunas && (
-                <div className="bg-emerald-50/50 border border-emerald-200 p-6 rounded-2xl">
-                  <p className="text-sm font-bold text-emerald-600 uppercase tracking-wide">Tanggal Pelunasan</p>
-                  <p className="font-extrabold text-emerald-800 text-xl mt-1.5">
-                    {new Date(activeBonDetail.tanggal_lunas).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Item List & Summary */}
-          <div className="grid gap-6 md:grid-cols-3">
-            {/* Left side: List of items */}
-            <div className="md:col-span-2 space-y-4">
-              <h3 className="text-xl font-extrabold text-slate-900 tracking-tight pl-1">
-                Rincian Barang / Produk
-              </h3>
-              
-              <div className="space-y-4">
-                {activeBonDetail.lines.map((line, i) => (
-                  <div key={i} className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs flex flex-col justify-between gap-4">
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <h4 className="text-xl font-black text-slate-900 leading-tight">
-                          {line.productName}
-                        </h4>
-                        <p className="text-sm font-bold text-slate-500 mt-1.5 uppercase tracking-wider">
-                          Tipe: {line.tipe} | Diskon: {line.diskon.join('% + ')}%
-                        </p>
-                      </div>
-                      <span className="bg-blue-50 text-[#002B8F] text-base font-extrabold px-4 py-2 rounded-xl border border-blue-200/50 shrink-0">
-                        {line.qty} barang
-                      </span>
-                    </div>
-                    
-                    <div className="border-t border-slate-100 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div className="text-slate-500 font-bold text-base">
-                        Harga Satuan: <span className="text-slate-800">Rp {line.harga_final.toLocaleString('id-ID')}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-slate-400 text-sm font-bold block sm:inline mr-1">Subtotal:</span>
-                        <span className="text-slate-900 text-2xl font-black">
-                          Rp {(line.harga_final * line.qty).toLocaleString('id-ID')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right side: Summary calculations */}
-            <div className="bg-white border-2 border-slate-200/60 rounded-2xl p-6 shadow-xs h-fit space-y-6">
-              <h3 className="text-xl font-extrabold text-slate-900 tracking-tight border-b border-slate-100 pb-3">
-                Ringkasan Tagihan
-              </h3>
-              
-              <div className="space-y-4 text-base">
-                <div className="flex justify-between font-bold text-slate-500">
-                  <span>Subtotal Produk:</span>
-                  <span className="text-slate-800">Rp {activeBonDetail.omzet.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between font-bold text-slate-500">
-                  <span>Ongkos Kirim:</span>
-                  <span className="text-slate-800">Rp {activeBonDetail.ongkir.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="border-t-2 border-dashed border-slate-200 pt-4 flex flex-col space-y-2">
-                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Total Tagihan Akhir</span>
-                  <span className="text-3xl font-black text-[#002B8F] tracking-tight">
-                    Rp {(activeBonDetail.omzet + activeBonDetail.ongkir).toLocaleString('id-ID')}
-                  </span>
-                </div>
-              </div>
-
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => downloadBonPdf(bonToPdfInput(activeBonDetail, activeCustomer?.alamat))}
+                className="flex items-center gap-1.5 px-4 py-2 border border-slate-300 hover:border-slate-500 hover:bg-slate-50 text-slate-700 font-bold text-sm rounded-xl cursor-pointer"
+                style={{ minHeight: '38px' }}
+              >
+                <Printer size={16} />
+                Unduh PDF Bon
+              </button>
               {activeBonDetail.status === 'Open' && (
                 <button
                   onClick={() => {
-                      setTargetBonId(activeBonDetail.id);
-                      setSettleMode('single');
-                      setShowSettleModal(true);
+                    setTargetBonId(activeBonDetail.id);
+                    setSettleMode('single');
+                    setShowSettleModal(true);
                   }}
-                  className="w-full flex items-center justify-center space-x-2 px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl shadow-md transition-all cursor-pointer text-base"
-                  style={{ minHeight: '52px' }}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl cursor-pointer"
+                  style={{ minHeight: '38px' }}
                 >
-                  <Check size={22} className="stroke-[3]" />
-                  <span>Lunasi Transaksi Ini</span>
+                  <Check size={16} />
+                  Lunasi
                 </button>
               )}
             </div>
           </div>
+
+          <BonDetailView
+            bon={activeBonDetail}
+            customerAlamat={activeCustomer?.alamat}
+          />
         </div>
       ) : isEditingCustomer ? (
         /* TAMPILAN 4: HALAMAN FORM UBAH DATA PELANGGAN (BARU - RAMAH LANSIA) */
@@ -1115,11 +1039,10 @@ export default function PelangganPage() {
                     <label htmlFor="cust-threshold" className="block text-base font-extrabold text-slate-600 uppercase tracking-wide">
                       Ambang Batas Bonus (Rp)
                     </label>
-                    <input
+                    <NominalInput
                       id="cust-threshold"
-                      type="number"
                       value={editCustomerForm.threshold_bonus}
-                      onChange={(e) => setEditCustomerForm(prev => prev ? { ...prev, threshold_bonus: Number(e.target.value) } : null)}
+                      onChange={(v) => setEditCustomerForm(prev => prev ? { ...prev, threshold_bonus: v } : null)}
                       className="w-full p-4 bg-slate-50 border-2 border-slate-300 rounded-2xl text-xl font-bold text-slate-900 focus:outline-none focus:border-[#002B8F] focus:ring-4 focus:ring-[#002B8F]/10 focus:bg-white transition-all shadow-sm"
                       style={{ minHeight: '56px' }}
                     />
@@ -1687,7 +1610,7 @@ export default function PelangganPage() {
         title="Konfirmasi Pelunasan"
         description={
           settleMode === 'bulk'
-            ? `Semua transaksi berstatus "Open" pada ${monthsList.find(m => m.value === selectedMonth)?.label ?? ''} ${selectedYear} untuk pelanggan ini akan diubah menjadi Lunas.`
+            ? `Semua transaksi berstatus Piutang pada ${monthsList.find(m => m.value === selectedMonth)?.label ?? ''} ${selectedYear} untuk pelanggan ini akan diubah menjadi Lunas.`
             : 'Transaksi terpilih akan diubah statusnya menjadi Lunas secara permanen.'
         }
         confirmLabel="Konfirmasi Lunas"

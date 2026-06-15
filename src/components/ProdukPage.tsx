@@ -10,6 +10,7 @@ import {
   Wand2,
   PenLine,
 } from 'lucide-react';
+import NominalInput from './ui/NominalInput';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -348,13 +349,11 @@ export default function ProdukPage() {
               <label htmlFor="prod-base" className="block text-base font-bold text-slate-700">
                 Harga Jual ke Pelanggan (Rp)
               </label>
-              <input
+              <NominalInput
                 id="prod-base"
-                type="number"
-                min={0}
                 placeholder="0"
-                value={formHargaBase || ''}
-                onChange={e => setFormHargaBase(Math.max(0, Number(e.target.value)))}
+                value={formHargaBase}
+                onChange={setFormHargaBase}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-base font-semibold text-slate-900 focus:outline-none focus:border-[#002B8F] focus:ring-2 focus:ring-[#002B8F]/10 focus:bg-white transition-all shadow-sm"
                 style={{ minHeight: '48px' }}
               />
@@ -368,13 +367,11 @@ export default function ProdukPage() {
               <label htmlFor="prod-modal" className="block text-base font-bold text-slate-700">
                 Harga Modal / Biaya Beli (Rp) <span className="text-sm text-amber-600 font-semibold">(Rahasia)</span>
               </label>
-              <input
+              <NominalInput
                 id="prod-modal"
-                type="number"
-                min={0}
                 placeholder="0"
-                value={formHargaModal || ''}
-                onChange={e => setFormHargaModal(Math.max(0, Number(e.target.value)))}
+                value={formHargaModal}
+                onChange={setFormHargaModal}
                 className="w-full px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-xl text-base font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 focus:bg-white transition-all shadow-sm"
                 style={{ minHeight: '48px' }}
               />
@@ -492,11 +489,11 @@ export default function ProdukPage() {
             <p className="text-4xl font-black text-slate-900 mt-1">{activeProduk.length}</p>
           </div>
           <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 flex flex-col justify-center">
-            <p className="text-sm font-extrabold text-blue-500 uppercase tracking-wider">Tipe LM — Logam Mulia</p>
+            <p className="text-sm font-extrabold text-blue-500 uppercase tracking-wider">Tipe LM</p>
             <p className="text-4xl font-black text-[#002B8F] mt-1">{countLM}</p>
           </div>
           <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 flex flex-col justify-center">
-            <p className="text-sm font-extrabold text-emerald-600 uppercase tracking-wider">Tipe BR — Barang</p>
+            <p className="text-sm font-extrabold text-emerald-600 uppercase tracking-wider">Tipe BR</p>
             <p className="text-4xl font-black text-emerald-700 mt-1">{countBR}</p>
           </div>
         </div>
