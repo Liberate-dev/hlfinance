@@ -323,6 +323,23 @@ export async function resetPasswordWithRecovery(
   return { email: result.email };
 }
 
+export async function clearAllBusinessData(): Promise<{ data?: Record<string, unknown>; error?: string }> {
+  const { data, error } = await supabase.rpc('clear_all_business_data');
+  if (error) {
+    const msg = error.message;
+    if (isAdminMigrationMissingError(msg) || msg.includes('clear_all_business_data')) {
+      return {
+        error:
+          'Fungsi bersihkan data belum ada. Jalankan supabase/sql-editor/11_clear_all_data.sql di Supabase SQL Editor.',
+      };
+    }
+    return { error: msg };
+  }
+  const result = data as { success?: boolean; error?: string; deleted?: Record<string, number> };
+  if (!result?.success) return { error: result?.error ?? 'Gagal membersihkan data.' };
+  return { data: result as Record<string, unknown> };
+}
+
 export async function restoreCustomer(id: string): Promise<{ error?: string }> {
   const { data, error } = await supabase.rpc('restore_customer', { p_id: id });
   if (error) return { error: formatAdminRpcError(error.message) };

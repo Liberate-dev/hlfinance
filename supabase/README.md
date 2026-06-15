@@ -22,6 +22,7 @@ Jalankan berurutan dari folder **`sql-editor/`** (lebih aman, per step):
 9. `08_admin_settings.sql` atau `../migrations/20240615000001_admin_settings.sql` (**wajib** untuk menu Admin & lupa sandi)
 10. `09_transaction_soft_delete.sql` atau `../migrations/20240616000001_transaction_soft_delete.sql` (**wajib** untuk hapus/pulihkan bon)
 11. `10_delete_rules.sql` atau `../migrations/20240617000001_delete_rules.sql` (aturan hapus pelanggan & bon batal)
+12. `11_clear_all_data.sql` atau `../migrations/20240618000001_clear_all_data.sql` (opsional: reset semua data bisnis / tombol Admin)
 
 Cara copy yang benar: buka file di VS Code/Cursor → Ctrl+A → Ctrl+C → paste ke SQL Editor.
 

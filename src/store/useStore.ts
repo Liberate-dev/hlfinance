@@ -80,6 +80,7 @@ interface StoreState {
   restoreCustomer: (id: string) => Promise<string | null>;
   restoreProduct: (id: string) => Promise<string | null>;
   restoreTransaction: (id: string) => Promise<string | null>;
+  clearAllBusinessData: () => Promise<string | null>;
 
   addTransaction: (transaction: Bon) => Promise<string | null>;
   updateTransaction: (transaction: Bon) => Promise<string | null>;
@@ -178,6 +179,12 @@ export const useStore = create<StoreState>((set, get) => ({
 
   restoreTransaction: async (id) => {
     const { error } = await api.restoreTransaction(id);
+    if (error) return error;
+    return get().refreshAfterMutation();
+  },
+
+  clearAllBusinessData: async () => {
+    const { error } = await api.clearAllBusinessData();
     if (error) return error;
     return get().refreshAfterMutation();
   },

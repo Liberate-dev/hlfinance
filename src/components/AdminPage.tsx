@@ -5,6 +5,7 @@ import {
   Lock,
   KeyRound,
   RotateCcw,
+  Trash2,
   Users,
   Package,
   Receipt,
@@ -18,7 +19,7 @@ import { useStore } from '../store/useStore';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { toast } from './ui/AppToast';
 
-type AdminSection = 'account' | 'recovery' | 'restore';
+type AdminSection = 'account' | 'recovery' | 'restore' | 'clear';
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -55,10 +56,26 @@ const MENU_ITEMS: {
     accent: 'hover:border-emerald-600',
     iconBg: 'bg-emerald-50 text-emerald-700',
   },
+  {
+    id: 'clear',
+    title: 'Bersihkan Data',
+    description: 'Hapus permanen semua pelanggan, produk, dan bon. Mulai dari kosong.',
+    icon: Trash2,
+    accent: 'hover:border-rose-600',
+    iconBg: 'bg-rose-50 text-rose-700',
+  },
 ];
 
 export default function AdminPage() {
-  const { customers, products, transactions, restoreCustomer, restoreProduct, restoreTransaction } = useStore();
+  const {
+    customers,
+    products,
+    transactions,
+    restoreCustomer,
+    restoreProduct,
+    restoreTransaction,
+    clearAllBusinessData,
+  } = useStore();
 
   const [activeSection, setActiveSection] = useState<AdminSection | null>(null);
 
@@ -83,6 +100,9 @@ export default function AdminPage() {
     id: string;
     name: string;
   } | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState('');
+  const [clearingData, setClearingData] = useState(false);
 
   const notifyError = (msg: string) => toast(msg, 'error');
   const showSuccess = (msg: string) => toast(msg);
@@ -101,6 +121,11 @@ export default function AdminPage() {
   );
 
   const deletedTotal = deletedCustomers.length + deletedProducts.length + deletedTransactions.length;
+
+  const activeCustomers = useMemo(() => customers.filter((c) => !c.deleted_at), [customers]);
+  const activeProducts = useMemo(() => products.filter((p) => !p.deleted_at), [products]);
+  const activeTransactions = useMemo(() => transactions.filter((t) => !t.deleted_at), [transactions]);
+  const businessDataTotal = activeCustomers.length + activeProducts.length + activeTransactions.length;
 
   useEffect(() => {
     (async () => {
@@ -221,6 +246,23 @@ export default function AdminPage() {
     showSuccess('Pengaturan kode pemulihan berhasil disimpan.');
   };
 
+  const handleClearAllData = async () => {
+    if (clearConfirmText.trim().toUpperCase() !== 'HAPUS SEMUA') {
+      notifyError('Ketik HAPUS SEMUA untuk konfirmasi.');
+      return;
+    }
+    setClearingData(true);
+    const err = await clearAllBusinessData();
+    setClearingData(false);
+    setShowClearConfirm(false);
+    setClearConfirmText('');
+    if (err) {
+      notifyError(err);
+      return;
+    }
+    showSuccess('Semua data pelanggan, produk, dan bon berhasil dibersihkan.');
+  };
+
   const handleRestore = async () => {
     if (!restoreTarget) return;
     const err = restoreTarget.type === 'customer'
@@ -239,6 +281,7 @@ export default function AdminPage() {
   const getMenuBadge = (id: AdminSection) => {
     if (id === 'recovery' && hasRecoveryCode) return 'Sudah diatur';
     if (id === 'restore' && deletedTotal > 0) return `${deletedTotal} item`;
+    if (id === 'clear' && businessDataTotal > 0) return `${businessDataTotal} data`;
     return null;
   };
 
@@ -382,6 +425,47 @@ export default function AdminPage() {
             Simpan Kode Pemulihan
           </button>
         </>
+      )}
+    </section>
+  );
+
+  const renderClearForm = () => (
+    <section className="bg-white border-2 border-rose-200 rounded-3xl p-6 md:p-8 shadow-xs space-y-6">
+      <div className="flex items-center gap-2 text-rose-700">
+        <Trash2 size={22} />
+        <h2 className="text-xl font-black text-slate-900">Bersihkan Semua Data Bisnis</h2>
+      </div>
+      <p className="text-sm font-semibold text-slate-600 leading-relaxed">
+        Menghapus permanen seluruh pelanggan, produk, bon, dan baris bon — termasuk data yang pernah di-soft-delete.
+        Akun login dan pengaturan admin tidak ikut terhapus.
+      </p>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase text-slate-500">Pelanggan</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{customers.length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase text-slate-500">Produk</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{products.length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase text-slate-500">Bon</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{transactions.length}</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowClearConfirm(true)}
+        disabled={businessDataTotal === 0}
+        className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-extrabold rounded-xl min-h-[48px]"
+      >
+        <Trash2 size={18} />
+        Bersihkan Semua Data
+      </button>
+      {businessDataTotal === 0 && (
+        <p className="text-sm font-semibold text-slate-400">Database bisnis sudah kosong.</p>
       )}
     </section>
   );
@@ -536,9 +620,10 @@ export default function AdminPage() {
           {activeSection === 'account' && renderAccountForm()}
           {activeSection === 'recovery' && renderRecoveryForm()}
           {activeSection === 'restore' && renderRestoreForm()}
+          {activeSection === 'clear' && renderClearForm()}
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
           {MENU_ITEMS.map((item) => {
             const Icon = item.icon;
             const badge = getMenuBadge(item.id);
@@ -590,6 +675,31 @@ export default function AdminPage() {
         onConfirm={handleRestore}
         onCancel={() => setRestoreTarget(null)}
       />
+
+      <ConfirmDialog
+        open={showClearConfirm}
+        title="Hapus Semua Data?"
+        description="Tindakan ini permanen. Semua pelanggan, produk, dan bon akan dihapus dari database."
+        confirmLabel={clearingData ? 'Menghapus...' : 'Ya, Hapus Semua'}
+        tone="danger"
+        onConfirm={handleClearAllData}
+        onCancel={() => {
+          setShowClearConfirm(false);
+          setClearConfirmText('');
+        }}
+      >
+        <label htmlFor="clear-confirm" className="block text-sm font-bold text-slate-600">
+          Ketik <span className="font-mono text-rose-700">HAPUS SEMUA</span> untuk melanjutkan
+        </label>
+        <input
+          id="clear-confirm"
+          type="text"
+          value={clearConfirmText}
+          onChange={(e) => setClearConfirmText(e.target.value)}
+          className="mt-2 w-full px-4 py-3 border-2 border-rose-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-rose-500"
+          autoComplete="off"
+        />
+      </ConfirmDialog>
     </div>
   );
 }
