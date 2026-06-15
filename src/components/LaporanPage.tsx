@@ -1,8 +1,30 @@
 import { useState, useMemo } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import type { Bon, Customer } from '../store/useStore';
 
 const formatRp = (n: number) => 'Rp ' + (Number.isFinite(n) ? n : 0).toLocaleString('id-ID');
+
+const getCurrentMonthYearLabel = () => {
+  const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const d = new Date();
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+const MONTH_OPTIONS = [
+  { v: '01', l: 'Januari', num: 1 },
+  { v: '02', l: 'Februari', num: 2 },
+  { v: '03', l: 'Maret', num: 3 },
+  { v: '04', l: 'April', num: 4 },
+  { v: '05', l: 'Mei', num: 5 },
+  { v: '06', l: 'Juni', num: 6 },
+  { v: '07', l: 'Juli', num: 7 },
+  { v: '08', l: 'Agustus', num: 8 },
+  { v: '09', l: 'September', num: 9 },
+  { v: '10', l: 'Oktober', num: 10 },
+  { v: '11', l: 'November', num: 11 },
+  { v: '12', l: 'Desember', num: 12 },
+] as const;
 
 type ReportTab = 'semua' | 'LM' | 'BR' | 'bonus';
 type TipeFilter = 'semua' | 'LM' | 'BR';
@@ -75,11 +97,14 @@ export default function LaporanPage() {
   const currentYear = today.getFullYear();
   const currentMonthNum = today.getMonth() + 1;
 
-  const [selectedMonth, setSelectedMonth] = useState<number | 'semua'>(currentMonthNum);
-  const [selectedYear, setSelectedYear] = useState<number | 'semua'>(currentYear);
+  const [filterMode, setFilterMode] = useState<'semua' | 'bulan-ini'>('semua');
+  const [filterMonth, setFilterMonth] = useState<string>('semua');
+  const [filterYear, setFilterYear] = useState<string>('semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>('semua');
-  
+  const [showCustomerDetail, setShowCustomerDetail] = useState(false);
+  const [showLmBrBreakdown, setShowLmBrBreakdown] = useState(false);
+
   // State untuk Detail Modal Pelanggan
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
 
@@ -87,58 +112,51 @@ export default function LaporanPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const monthsList = [
-    { value: 1, label: 'Januari' },
-    { value: 2, label: 'Februari' },
-    { value: 3, label: 'Maret' },
-    { value: 4, label: 'April' },
-    { value: 5, label: 'Mei' },
-    { value: 6, label: 'Juni' },
-    { value: 7, label: 'Juli' },
-    { value: 8, label: 'Agustus' },
-    { value: 9, label: 'September' },
-    { value: 10, label: 'Oktober' },
-    { value: 11, label: 'November' },
-    { value: 12, label: 'Desember' }
-  ];
-
   const yearsList = Array.from(
-    { length: Math.max(1, currentYear - 2024 + 1) },
-    (_, i) => 2024 + i
+    { length: Math.max(1, currentYear - 2023 + 1) },
+    (_, i) => 2023 + i
   );
 
-  const handleYearChange = (year: number | 'semua') => {
-    setSelectedYear(year);
-    if (year === currentYear && selectedMonth !== 'semua' && selectedMonth > currentMonthNum) {
-      setSelectedMonth(currentMonthNum);
-    }
-  };
+  const currentMonthYear = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
 
   // Dinamis generate label periode laporan (Sangat jelas untuk orang tua)
   const periodLabel = useMemo(() => {
-    const monthLabel = selectedMonth === 'semua' ? 'Semua Bulan' : (monthsList.find(m => m.value === selectedMonth)?.label || '');
-    const yearLabel = selectedYear === 'semua' ? 'Semua Tahun' : selectedYear.toString();
-    
-    if (selectedMonth === 'semua' && selectedYear === 'semua') return 'Semua Periode';
-    if (selectedMonth === 'semua') return `Tahun ${yearLabel}`;
-    if (selectedYear === 'semua') return `Bulan ${monthLabel} (Semua Tahun)`;
-    return `${monthLabel} ${yearLabel}`;
-  }, [selectedMonth, selectedYear, monthsList]);
+    if (filterMode === 'bulan-ini') return getCurrentMonthYearLabel();
 
-  // Filter transaksi berdasarkan bulan/tahun terpilih (Mendukung opsi "Semua")
+    const monthLabel = filterMonth === 'semua'
+      ? 'Semua Bulan'
+      : (MONTH_OPTIONS.find(m => m.v === filterMonth)?.l || '');
+    const yearLabel = filterYear === 'semua' ? 'Semua Tahun' : filterYear;
+
+    if (filterMonth === 'semua' && filterYear === 'semua') return 'Semua Periode';
+    if (filterMonth === 'semua') return `Tahun ${yearLabel}`;
+    if (filterYear === 'semua') return `Bulan ${monthLabel} (Semua Tahun)`;
+    return `${monthLabel} ${yearLabel}`;
+  }, [filterMode, filterMonth, filterYear]);
+
+  const reportTabLabel = useMemo(() => {
+    const labels: Record<ReportTab, string> = {
+      semua: 'Keseluruhan (LM + BR)',
+      LM: 'LM saja',
+      BR: 'BR saja',
+      bonus: 'Log Bonus',
+    };
+    return labels[activeReportTab];
+  }, [activeReportTab]);
+
+  // Filter transaksi — mekanisme sama dengan Pencatatan Bon (Semua / Bulan Ini)
   const monthTransactions = useMemo(() => {
     return transactions.filter(t => {
       if (!t?.tanggal) return false;
       const parts = t.tanggal.split('-');
-      const txYear = parseInt(parts[0], 10);
-      const txMonth = parseInt(parts[1], 10);
-      
-      const matchYear = selectedYear === 'semua' || txYear === selectedYear;
-      const matchMonth = selectedMonth === 'semua' || txMonth === selectedMonth;
-      
-      return matchYear && matchMonth;
+
+      const matchMode = filterMode === 'semua' || t.tanggal.startsWith(currentMonthYear);
+      const matchMonth = filterMode === 'bulan-ini' || filterMonth === 'semua' || parts[1] === filterMonth;
+      const matchYear = filterMode === 'bulan-ini' || filterYear === 'semua' || parts[0] === filterYear;
+
+      return matchMode && matchMonth && matchYear;
     });
-  }, [transactions, selectedYear, selectedMonth]);
+  }, [transactions, filterMode, filterMonth, filterYear, currentMonthYear]);
 
   // Transaksi bonus saja
   const bonusTransactions = useMemo(() => {
@@ -568,86 +586,109 @@ export default function LaporanPage() {
       <div className="border-b-2 border-slate-200 pb-6">
         <h1 className="text-4xl font-black text-slate-900 tracking-tight">HL Laporan</h1>
         <p className="text-slate-600 text-lg font-bold mt-1.5 leading-relaxed">
-          Rekap omzet, laba, belum bayar, dan pembayaran per periode — sesuai AC-7.
+          Ringkasan penjualan per bulan: berapa omzet, laba, belum bayar, dan pembayaran yang sudah masuk.
         </p>
       </div>
 
       {/* CARD FILTER & PERIODE LAPORAN */}
       <div className="bg-white border-2 border-slate-300 rounded-3xl p-6 md:p-8 shadow-sm space-y-5">
-        <h3 className="text-xl font-black text-slate-900 pl-1">
-          Pilih Filter & Periode Laporan
-        </h3>
-        
-        <div className="flex flex-col md:flex-row items-end gap-5">
-          {/* Dropdown Tahun */}
-          <div className="w-full md:w-40 space-y-2.5 shrink-0">
-            <label className="block text-sm font-black text-slate-500 uppercase tracking-wider pl-1">Tahun</label>
-            <select
-              value={selectedYear}
-              onChange={(e) => {
-                const val = e.target.value;
-                handleYearChange(val === 'semua' ? 'semua' : Number(val));
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h3 className="text-xl font-black text-slate-900 pl-1">
+              Pilih Filter & Periode Laporan
+            </h3>
+            {filterMode === 'bulan-ini' && (
+              <span className="bg-[#e8f0fe] text-[#002B8F] border border-blue-200 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">
+                Periode: {getCurrentMonthYearLabel()}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2.5 mt-3">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('semua');
+                setFilterMonth('semua');
+                setFilterYear('semua');
                 setCurrentPage(1);
               }}
-              className="w-full bg-slate-50 hover:bg-slate-100 border-2 border-slate-300 px-5 py-3 rounded-2xl outline-none font-black text-slate-900 text-xl cursor-pointer focus:border-[#002B8F] transition-all shadow-2xs"
-              style={{ minHeight: '56px' }}
+              className={`px-6 py-2 rounded-full font-bold text-sm border transition-all cursor-pointer ${
+                filterMode === 'semua'
+                  ? 'bg-[#e8f0fe] text-[#002B8F] border-blue-200 shadow-sm'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+              }`}
+              style={{ minHeight: '48px' }}
             >
-              <option value="semua">Semua Tahun</option>
-              {yearsList.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Dropdown Bulan */}
-          <div className="w-full md:w-52 space-y-2.5 shrink-0">
-            <label className="block text-sm font-black text-slate-500 uppercase tracking-wider pl-1">Bulan</label>
-            <select
-              value={selectedMonth}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedMonth(val === 'semua' ? 'semua' : Number(val));
+              Semua
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('bulan-ini');
+                const d = new Date();
+                setFilterMonth(String(d.getMonth() + 1).padStart(2, '0'));
+                setFilterYear(String(d.getFullYear()));
                 setCurrentPage(1);
               }}
-              className="w-full bg-slate-50 hover:bg-slate-100 border-2 border-slate-300 px-5 py-3 rounded-2xl outline-none font-black text-slate-900 text-xl cursor-pointer focus:border-[#002B8F] transition-all shadow-2xs"
-              style={{ minHeight: '56px' }}
+              className={`px-6 py-2 rounded-full font-bold text-sm border transition-all cursor-pointer ${
+                filterMode === 'bulan-ini'
+                  ? 'bg-[#e8f0fe] text-[#002B8F] border-blue-200 shadow-sm'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+              }`}
+              style={{ minHeight: '48px' }}
             >
-              <option value="semua">Semua Bulan</option>
-              {monthsList.map(m => {
-                const isFutureMonth = selectedYear === currentYear && m.value > currentMonthNum;
-                if (isFutureMonth) return null;
-                return (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                );
-              })}
-            </select>
+              Bulan Ini
+            </button>
           </div>
-
-          {/* Cari Pelanggan */}
-          <div className="w-full md:flex-1 space-y-2.5">
-            <label className="block text-sm font-black text-slate-500 uppercase tracking-wider pl-1">Cari Pelanggan</label>
-            <input
-              type="text"
-              placeholder="Cari nama atau kode pelanggan..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full px-5 py-3 bg-slate-50 hover:bg-slate-100 border-2 border-slate-300 rounded-2xl text-xl font-black text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#002B8F] focus:bg-white transition-all shadow-2xs"
-              style={{ minHeight: '56px' }}
-            />
-          </div>
-
-          {/* Tombol Tampilkan */}
-          <button
-            onClick={() => setCurrentPage(1)}
-            className="flex items-center justify-center gap-3 px-8 py-4 bg-[#006B44] hover:bg-[#005234] text-white font-black text-lg rounded-2xl shadow-md transition-all shrink-0 cursor-pointer w-full md:w-auto hover:scale-[1.02] active:scale-[0.98]"
-            style={{ minHeight: '56px' }}
-          >
-            <span>Tampilkan</span>
-          </button>
         </div>
+
+        {filterMode !== 'bulan-ini' && (
+          <div className="border-t border-slate-100 pt-4 flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col gap-1.5 min-w-[140px]">
+              <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Bulan</label>
+              <select
+                value={filterMonth}
+                onChange={(e) => {
+                  setFilterMonth(e.target.value);
+                  setFilterMode('semua');
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-base font-semibold text-slate-800 outline-none focus:border-[#002B8F] focus:ring-2 focus:ring-[#002B8F]/10 min-h-[48px] cursor-pointer"
+              >
+                <option value="semua">Semua Bulan</option>
+                {MONTH_OPTIONS.map(m => {
+                  const isFutureMonth = filterYear === currentYear.toString() && m.num > currentMonthNum;
+                  if (isFutureMonth) return null;
+                  return (
+                    <option key={m.v} value={m.v}>{m.l}</option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5 min-w-[120px]">
+              <label className="text-sm text-slate-500 font-bold uppercase tracking-wide">Tahun</label>
+              <select
+                value={filterYear}
+                onChange={(e) => {
+                  const yr = e.target.value;
+                  setFilterYear(yr);
+                  setFilterMode('semua');
+                  setCurrentPage(1);
+                  if (yr === currentYear.toString() && filterMonth !== 'semua' && parseInt(filterMonth, 10) > currentMonthNum) {
+                    setFilterMonth('semua');
+                  }
+                }}
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-base font-semibold text-slate-800 outline-none focus:border-[#002B8F] focus:ring-2 focus:ring-[#002B8F]/10 min-h-[48px] cursor-pointer"
+              >
+                <option value="semua">Semua Tahun</option>
+                {yearsList.map(y => (
+                  <option key={y} value={y.toString()}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* SUB-TABS FILTER TIPE PRODUK */}
@@ -679,9 +720,24 @@ export default function LaporanPage() {
         </div>
       </div>
 
+      {/* Konteks periode */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center px-5 py-2.5 rounded-full bg-[#002B8F] text-white text-base font-black tracking-tight">
+          {periodLabel}
+        </span>
+        <span className="inline-flex items-center px-5 py-2.5 rounded-full bg-slate-100 text-slate-800 text-base font-bold border-2 border-slate-200">
+          {reportTabLabel}
+        </span>
+        {customerPerformance.length > 0 && (
+          <span className="text-sm font-bold text-slate-500">
+            {customerPerformance.length} pelanggan dengan transaksi
+          </span>
+        )}
+      </div>
+
       {/* METRIK KEUANGAN */}
+      {activeReportTab === 'bonus' ? (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {activeReportTab === 'bonus' ? (
           <>
             {/* Total Klaim */}
             <div className="bg-amber-50/60 border-2 border-amber-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-amber-500 transition-colors">
@@ -751,147 +807,176 @@ export default function LaporanPage() {
               </div>
             </div>
           </>
-        ) : (
-          <>
-            {/* Omzet Lunas */}
-            <div className="bg-blue-50/60 border-2 border-blue-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-[#002B8F] transition-colors">
-              <div className="flex items-start justify-between">
-                <span className="bg-blue-200 text-blue-955 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-                  Omzet
-                </span>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm font-black text-[#002B8F]/70 uppercase tracking-wide">
-                  Omzet Lunas {activeReportTab !== 'semua' && `(${activeReportTab})`}
-                </p>
-                <p className="text-[26px] font-black text-[#002B8F] tracking-tight mt-0.5">
-                  {formatRp(metrics.omzetLunas)}
-                </p>
-              </div>
-            </div>
-
-            {/* Total Laba HL */}
-            <div className="bg-emerald-50/60 border-2 border-emerald-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-emerald-600 transition-colors">
-              <div className="flex items-start justify-between">
-                <span className="bg-emerald-200 text-emerald-955 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-                  Laba
-                </span>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm font-black text-emerald-800/70 uppercase tracking-wide">
-                  Total Laba HL {activeReportTab !== 'semua' && `(${activeReportTab})`}
-                </p>
-                <p className="text-[26px] font-black text-emerald-800 tracking-tight mt-0.5">
-                  {formatRp(metrics.labaHL)}
-                </p>
-              </div>
-            </div>
-
-            {/* Sudah Dibayar */}
-            <div className="bg-indigo-50/60 border-2 border-indigo-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-indigo-600 transition-colors">
-              <div className="flex items-start justify-between">
-                <span className="bg-indigo-200 text-indigo-955 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider font-sans">
-                  Terbayar
-                </span>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm font-black text-indigo-800/70 uppercase tracking-wide">
-                  Sudah Dibayar {activeReportTab !== 'semua' && `(${activeReportTab})`}
-                </p>
-                <p className="text-[26px] font-black text-indigo-955 tracking-tight mt-0.5">
-                  {formatRp(metrics.terbayar)}
-                </p>
-              </div>
-            </div>
-
-            {/* Belum bayar */}
-            <div className="bg-amber-50/65 border-2 border-amber-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between h-44 hover:border-amber-600 transition-colors">
-              <div className="flex items-start justify-between">
-                <span className="bg-amber-200 text-amber-850 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-                  Belum bayar
-                </span>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm font-black text-amber-850/70 uppercase tracking-wide">
-                  Belum bayar{activeReportTab !== 'semua' && ` (${activeReportTab})`}
-                </p>
-                <p className="text-[26px] font-black text-amber-900 tracking-tight mt-0.5">
-                  {formatRp(metrics.piutang)}
-                </p>
-              </div>
-            </div>
-          </>
-        )}
       </div>
+      ) : (
+      <div className="space-y-4">
+        {/* Kartu hero: Laba HL */}
+        <div className="bg-emerald-50/80 border-2 border-emerald-400 rounded-3xl p-7 md:p-8 shadow-sm">
+          <span className="bg-emerald-200 text-emerald-900 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
+            Ringkasan Utama
+          </span>
+          <p className="text-base font-black text-emerald-800/80 uppercase tracking-wide mt-4">
+            Total Laba HL {activeReportTab !== 'semua' && `(${activeReportTab})`}
+          </p>
+          <p className="text-[clamp(2rem,5vw,3rem)] font-black text-emerald-800 tracking-tight mt-1 leading-none">
+            {formatRp(metrics.labaHL)}
+          </p>
+        </div>
+
+        {/* 3 kartu sekunder */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="bg-blue-50/60 border-2 border-blue-300 rounded-2xl p-5 shadow-xs">
+            <p className="text-xs font-black text-[#002B8F]/70 uppercase tracking-wide">Omzet Lunas</p>
+            <p className="text-xl font-black text-[#002B8F] tracking-tight mt-1">{formatRp(metrics.omzetLunas)}</p>
+          </div>
+          <div className="bg-indigo-50/60 border-2 border-indigo-300 rounded-2xl p-5 shadow-xs">
+            <p className="text-xs font-black text-indigo-800/70 uppercase tracking-wide">Sudah Dibayar</p>
+            <p className="text-xl font-black text-indigo-900 tracking-tight mt-1">{formatRp(metrics.terbayar)}</p>
+          </div>
+          <div className="bg-amber-50/65 border-2 border-amber-300 rounded-2xl p-5 shadow-xs">
+            <p className="text-xs font-black text-amber-850/70 uppercase tracking-wide">Belum bayar</p>
+            <p className="text-xl font-black text-amber-900 tracking-tight mt-1">{formatRp(metrics.piutang)}</p>
+          </div>
+        </div>
+      </div>
+      )}
 
       {typeBreakdown && (
-        <div className="bg-white border-2 border-slate-300 rounded-3xl p-6 md:p-8 shadow-sm space-y-4">
-          <h3 className="text-lg font-black text-slate-900">Pemisahan LM vs BR (Keseluruhan)</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            {(['LM', 'BR'] as const).map((tipe) => {
-              const d = typeBreakdown[tipe];
-              return (
-                <div
-                  key={tipe}
-                  className={`rounded-2xl border-2 p-5 ${
-                    tipe === 'LM' ? 'border-blue-200 bg-blue-50/40' : 'border-violet-200 bg-violet-50/40'
-                  }`}
-                >
-                  <p className="text-sm font-black text-slate-600 uppercase tracking-wider mb-3">
-                    Tipe {tipe}
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 text-base font-bold text-slate-800">
-                    <div>
-                      <p className="text-sm text-slate-600 uppercase">Omzet Lunas</p>
-                      <p className="font-black text-slate-900">{formatRp(d.omzetLunas)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-600 uppercase">Laba HL</p>
-                      <p className="font-black text-emerald-800">{formatRp(d.labaHL)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-600 uppercase">Sudah Dibayar</p>
-                      <p className="font-black text-indigo-900">{formatRp(d.terbayar)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-600 uppercase">Belum bayar</p>
-                      <p className="font-black text-amber-900">{formatRp(d.piutang)}</p>
+        <div className="bg-white border-2 border-slate-300 rounded-3xl shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowLmBrBreakdown((v) => !v)}
+            className="w-full flex items-center justify-between gap-4 p-5 md:px-8 md:py-6 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+            style={{ minHeight: '56px' }}
+          >
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Perbandingan LM vs BR</h3>
+              <p className="text-sm font-semibold text-slate-500 mt-0.5">
+                Buka jika perlu melihat pemisahan per tipe produk
+              </p>
+            </div>
+            {showLmBrBreakdown
+              ? <ChevronUp size={24} className="text-slate-500 shrink-0" />
+              : <ChevronDown size={24} className="text-slate-500 shrink-0" />}
+          </button>
+
+          {showLmBrBreakdown && (
+            <div className="border-t-2 border-slate-100 px-5 md:px-8 pb-6 md:pb-8 space-y-3">
+              {(['LM', 'BR'] as const).map((tipe) => {
+                const d = typeBreakdown[tipe];
+                return (
+                  <div
+                    key={tipe}
+                    className={`rounded-2xl border-2 p-4 md:p-5 ${
+                      tipe === 'LM' ? 'border-blue-200 bg-blue-50/40' : 'border-violet-200 bg-violet-50/40'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+                      <span className={`text-sm font-black uppercase tracking-wider shrink-0 w-10 ${
+                        tipe === 'LM' ? 'text-[#002B8F]' : 'text-violet-800'
+                      }`}>
+                        {tipe}
+                      </span>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 text-sm font-bold text-slate-800">
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase">Omzet</p>
+                          <p className="font-black text-slate-900">{formatRp(d.omzetLunas)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase">Laba</p>
+                          <p className="font-black text-emerald-800">{formatRp(d.labaHL)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase">Sudah bayar</p>
+                          <p className="font-black text-indigo-900">{formatRp(d.terbayar)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase">Belum bayar</p>
+                          <p className="font-black text-amber-900">{formatRp(d.piutang)}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* RINCIAN PERFORMA PELANGGAN CARD */}
-      <div className="bg-white border-2 border-slate-300 rounded-3xl p-6 md:p-8 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 border-b-2 border-slate-100 pb-5 mb-6">
-          <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              {activeReportTab === 'bonus' 
-                ? `Rincian Klaim Bonus Pelanggan (${periodLabel})`
-                : `Rincian Performa Pelanggan (${periodLabel})`
-              }
-            </h2>
-            <p className="text-base font-semibold text-slate-500 mt-1">
-              {activeReportTab === 'bonus'
-                ? 'Daftar pelanggan yang mencairkan bonus — diurutkan berdasarkan unit bonus terbanyak.'
-                : `Rekap per pelanggan — diurutkan berdasarkan laba HL ${activeReportTab === 'semua' ? '(LM & BR)' : `(${activeReportTab})`}.`
-              }
-            </p>
+      {/* RINCIAN PERFORMA PELANGGAN */}
+      <div className="bg-white border-2 border-slate-300 rounded-3xl shadow-xs overflow-hidden">
+        <div className="p-6 md:p-8 border-b-2 border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                Rincian per Pelanggan
+              </h2>
+              <p className="text-base font-semibold text-slate-500 mt-1 max-w-2xl">
+                {activeReportTab === 'bonus'
+                  ? 'Daftar pelanggan yang mencairkan bonus — dibuka bila perlu melihat detail per orang.'
+                  : 'Rekap per pelanggan — dibuka bila perlu melihat siapa yang paling banyak berkontribusi.'}
+              </p>
+            </div>
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center justify-center gap-3 px-6 py-3.5 bg-[#1A202C] hover:bg-[#2D3748] text-white font-black text-base rounded-2xl shadow-md transition-all cursor-pointer shrink-0"
+              style={{ minHeight: '52px' }}
+            >
+              <span>Unduh PDF</span>
+            </button>
           </div>
 
-          {/* Tombol Unduh PDF */}
-          <button
-            onClick={handleExportPDF}
-            className="flex items-center justify-center gap-3 px-8 py-4 bg-[#1A202C] hover:bg-[#2D3748] text-white font-black text-base rounded-2xl shadow-md transition-all cursor-pointer hover:scale-[1.02]"
-            style={{ minHeight: '52px' }}
-          >
-            <span>Unduh PDF Laporan</span>
-          </button>
+          {!showCustomerDetail ? (
+            <button
+              type="button"
+              onClick={() => setShowCustomerDetail(true)}
+              className="mt-6 w-full flex items-center justify-between gap-4 px-6 py-5 bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-[#002B8F] rounded-2xl transition-all cursor-pointer"
+              style={{ minHeight: '56px' }}
+            >
+              <div className="text-left">
+                <p className="text-lg font-black text-slate-900">
+                  Lihat rincian per pelanggan
+                </p>
+                <p className="text-sm font-semibold text-slate-500 mt-0.5">
+                  {customerPerformance.length > 0
+                    ? `${customerPerformance.length} pelanggan · periode ${periodLabel}`
+                    : 'Tidak ada data untuk periode ini'}
+                </p>
+              </div>
+              <ChevronDown size={24} className="text-[#002B8F] shrink-0" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCustomerDetail(false)}
+              className="mt-6 flex items-center gap-2 text-[#002B8F] hover:text-[#001E66] font-black text-base transition-colors cursor-pointer"
+              style={{ minHeight: '48px' }}
+            >
+              <ChevronUp size={20} />
+              <span>Sembunyikan rincian per pelanggan</span>
+            </button>
+          )}
         </div>
+
+        {showCustomerDetail && (
+        <div className="p-6 md:p-8 pt-0 md:pt-0 space-y-5">
+          <div className="space-y-2.5">
+            <label className="block text-sm font-black text-slate-500 uppercase tracking-wider pl-1">
+              Cari Pelanggan
+            </label>
+            <input
+              type="text"
+              placeholder="Cari nama atau kode pelanggan..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-5 py-3 bg-slate-50 hover:bg-slate-100 border-2 border-slate-300 rounded-2xl text-lg font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#002B8F] focus:bg-white transition-all shadow-2xs"
+              style={{ minHeight: '52px' }}
+            />
+          </div>
 
         {/* Data performa: kartu di mobile, tabel di desktop */}
         <div className="overflow-hidden border-2 border-slate-200 rounded-2xl shadow-2xs">
@@ -1084,6 +1169,8 @@ export default function LaporanPage() {
               </button>
             </div>
           </div>
+        )}
+        </div>
         )}
       </div>
     </div>
