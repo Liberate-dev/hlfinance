@@ -6,6 +6,8 @@ import PelangganPage from './components/PelangganPage';
 import ProdukPage from './components/ProdukPage';
 import PenjualanPage from './components/PenjualanPage';
 import LaporanPage from './components/LaporanPage';
+import AdminPage from './components/AdminPage';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useStore } from './store/useStore';
 import AppToastHost from './components/ui/AppToast';
@@ -16,6 +18,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('beranda');
   const [penjualanStartInAdd, setPenjualanStartInAdd] = useState(false);
   const [penjualanSessionKey, setPenjualanSessionKey] = useState(0);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { fetchAllData, isLoading, isHydrated, dataError } = useStore();
 
   const navigateTo = (tab: string, options?: { openBonForm?: boolean }) => {
@@ -97,6 +100,8 @@ function App() {
         );
       case 'laporan':
         return <LaporanPage />;
+      case 'admin':
+        return <AdminPage />;
       default:
         return <DashboardPage onNavigate={navigateTo} />;
     }
@@ -111,7 +116,23 @@ function App() {
   }
 
   if (!isLoggedIn) {
-    return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+    if (showForgotPassword) {
+      return (
+        <ForgotPasswordPage
+          onBack={() => setShowForgotPassword(false)}
+          onLogin={() => {
+            setShowForgotPassword(false);
+            setIsLoggedIn(true);
+          }}
+        />
+      );
+    }
+    return (
+      <LoginPage
+        onLogin={() => setIsLoggedIn(true)}
+        onForgotPassword={() => setShowForgotPassword(true)}
+      />
+    );
   }
 
   return (

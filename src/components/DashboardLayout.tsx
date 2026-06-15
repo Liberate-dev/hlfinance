@@ -1,4 +1,4 @@
-import { Home, Users, Package, FileText, BarChart2, LogOut } from 'lucide-react';
+import { Home, Users, Package, FileText, BarChart2, Settings, LogOut } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -13,6 +13,7 @@ const menuItems = [
   { id: 'produk', label: 'Produk', shortLabel: 'Prod', icon: Package },
   { id: 'penjualan', label: 'Pencatatan Bon', shortLabel: 'Bon', icon: FileText },
   { id: 'laporan', label: 'Laporan', shortLabel: 'Lap', icon: BarChart2 },
+  { id: 'admin', label: 'Admin', shortLabel: 'Adm', icon: Settings },
 ];
 
 function NavButton({

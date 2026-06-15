@@ -255,3 +255,86 @@ export async function checkLoginAllowed(email: string): Promise<{ allowed: boole
 export async function resetLoginAttempts(email: string): Promise<void> {
   await supabase.rpc('reset_login_attempts', { p_email: email });
 }
+
+export type AdminSettings = {
+  recovery_clue: string;
+  has_recovery_code: boolean;
+};
+
+const ADMIN_MIGRATION_HINT =
+  'Migrasi admin belum dijalankan. Buka Supabase Dashboard → SQL Editor, lalu jalankan isi file supabase/sql-editor/08_admin_settings.sql.';
+
+export function isAdminMigrationMissingError(message: string): boolean {
+  return message.includes('schema cache') || message.includes('Could not find the function');
+}
+
+function formatAdminRpcError(message: string): string {
+  return isAdminMigrationMissingError(message) ? ADMIN_MIGRATION_HINT : message;
+}
+
+export async function getRecoveryClue(): Promise<{ clue?: string; error?: string }> {
+  const { data, error } = await supabase.rpc('get_recovery_clue');
+  if (error) return { error: formatAdminRpcError(error.message) };
+  return { clue: (data as string) ?? '' };
+}
+
+export async function getAdminSettings(): Promise<{ data?: AdminSettings; error?: string }> {
+  const { data, error } = await supabase.rpc('get_admin_settings');
+  if (error) return { error: formatAdminRpcError(error.message) };
+  const row = data as { recovery_clue?: string; has_recovery_code?: boolean };
+  return {
+    data: {
+      recovery_clue: row.recovery_clue ?? '',
+      has_recovery_code: !!row.has_recovery_code,
+    },
+  };
+}
+
+export async function updateRecoverySettings(
+  clue: string,
+  code?: string
+): Promise<{ error?: string }> {
+  const { error } = await supabase.rpc('update_recovery_settings', {
+    p_clue: clue,
+    p_code: code?.trim() ? code.trim() : null,
+  });
+  return error ? { error: formatAdminRpcError(error.message) } : {};
+}
+
+export async function resetPasswordWithRecovery(
+  code: string,
+  newPassword: string
+): Promise<{ email?: string; error?: string }> {
+  const { data, error } = await supabase.rpc('reset_password_with_recovery', {
+    p_code: code.trim(),
+    p_new_password: newPassword,
+  });
+  if (error) return { error: formatAdminRpcError(error.message) };
+  const result = data as { success?: boolean; email?: string; error?: string };
+  if (!result?.success) return { error: result?.error ?? 'Gagal mereset kata sandi.' };
+  return { email: result.email };
+}
+
+export async function restoreCustomer(id: string): Promise<{ error?: string }> {
+  const { data, error } = await supabase.rpc('restore_customer', { p_id: id });
+  if (error) return { error: formatAdminRpcError(error.message) };
+  const result = data as { success?: boolean; error?: string };
+  if (!result?.success) return { error: result?.error ?? 'Gagal memulihkan pelanggan.' };
+  return {};
+}
+
+export async function restoreProduct(id: string): Promise<{ error?: string }> {
+  const { data, error } = await supabase.rpc('restore_product', { p_id: id });
+  if (error) return { error: formatAdminRpcError(error.message) };
+  const result = data as { success?: boolean; error?: string };
+  if (!result?.success) return { error: result?.error ?? 'Gagal memulihkan produk.' };
+  return {};
+}
+
+export async function restoreTransaction(id: string): Promise<{ error?: string }> {
+  const { data, error } = await supabase.rpc('restore_transaction', { p_id: id });
+  if (error) return { error: formatAdminRpcError(error.message) };
+  const result = data as { success?: boolean; error?: string };
+  if (!result?.success) return { error: result?.error ?? 'Gagal memulihkan bon.' };
+  return {};
+}

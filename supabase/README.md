@@ -18,6 +18,9 @@ Jalankan berurutan dari folder **`sql-editor/`** (lebih aman, per step):
 5. `05_rls_grants.sql` → Run
 6. `../migrations/20240613000002_seed_dev.sql` (opsional, pelanggan + produk)
 7. `06_seed_reports.sql` atau `../migrations/20240613000003_seed_reports.sql` (opsional, ~140 transaksi untuk uji laporan)
+8. `07_security_hardening.sql` atau `../migrations/20240614000001_security_hardening.sql` (lockout login)
+9. `08_admin_settings.sql` atau `../migrations/20240615000001_admin_settings.sql` (**wajib** untuk menu Admin & lupa sandi)
+10. `09_transaction_soft_delete.sql` atau `../migrations/20240616000001_transaction_soft_delete.sql` (**wajib** untuk hapus/pulihkan bon)
 
 Cara copy yang benar: buka file di VS Code/Cursor → Ctrl+A → Ctrl+C → paste ke SQL Editor.
 

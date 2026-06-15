@@ -5,9 +5,10 @@ import { checkLoginAllowed, resetLoginAttempts } from '../lib/dataService';
 
 interface LoginPageProps {
   onLogin: () => void;
+  onForgotPassword: () => void;
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -145,17 +146,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 Ingat Saya
               </span>
             </label>
-            <a
-              href="#forgot-password"
-              onClick={(e) => {
-                e.preventDefault();
+            <button
+              type="button"
+              onClick={() => {
                 setErrorMsg('');
-                setInfoMsg('Silakan hubungi administrator untuk mereset kata sandi Anda.');
+                setInfoMsg('');
+                onForgotPassword();
               }}
-              className="text-[#002B8F] hover:text-blue-800 font-semibold transition-colors"
+              className="text-[#002B8F] hover:text-blue-800 font-semibold transition-colors min-h-[48px]"
             >
               Lupa Sandi?
-            </a>
+            </button>
           </div>
 
           <button

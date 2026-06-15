@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import type { Bon, Customer } from '../store/useStore';
+import { activeTransactions } from '../lib/activeData';
 
 const formatRp = (n: number) => 'Rp ' + (Number.isFinite(n) ? n : 0).toLocaleString('id-ID');
 
@@ -90,7 +91,10 @@ function aggregateFinancials(transactions: Bon[], tipe: TipeFilter): TxFinancial
 
 export default function LaporanPage() {
   const { transactions: rawTransactions, customers: rawCustomers } = useStore();
-  const transactions = rawTransactions ?? [];
+  const transactions = useMemo(
+    () => activeTransactions(rawTransactions ?? []),
+    [rawTransactions]
+  );
   const customers = rawCustomers ?? [];
 
   const today = new Date();

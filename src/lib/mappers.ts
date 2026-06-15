@@ -35,6 +35,7 @@ type DbTransaction = {
   tanggal_lunas: string | null;
   locked_at: string | null;
   deskripsi: string | null;
+  deleted_at: string | null;
   customers?: { nama: string } | { nama: string }[] | null;
 };
 
@@ -126,6 +127,7 @@ export function mapBon(tx: DbTransaction, lines: BonLine[]): Bon {
     deskripsi: tx.deskripsi ?? undefined,
     is_bonus: tx.is_bonus,
     bonus_count: tx.bonus_count > 0 ? tx.bonus_count : undefined,
+    deleted_at: tx.deleted_at ?? null,
     lines,
   };
 }
@@ -137,7 +139,7 @@ export function computeCustomerStats(
   let accumulated_omzet = 0;
   let bonus_claimed = 0;
   for (const tx of transactions) {
-    if (tx.customer_id !== customerId || tx.status !== 'Lunas') continue;
+    if (tx.customer_id !== customerId || tx.status !== 'Lunas' || tx.deleted_at) continue;
     accumulated_omzet += tx.omzet;
     if (tx.is_bonus) bonus_claimed += tx.bonus_count ?? 1;
   }

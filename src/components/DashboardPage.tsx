@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import { useStore } from '../store/useStore';
+import { activeTransactions } from '../lib/activeData';
 
 interface DashboardPageProps {
   onNavigate: (tab: string, options?: { openBonForm?: boolean }) => void;
@@ -36,11 +37,12 @@ function KpiAmount({ value, tone }: { value: number; tone: 'blue' | 'emerald' | 
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { transactions, customers, setShowAddCustomer } = useStore();
+  const activeTx = activeTransactions(transactions);
 
   const currentMonthYear = new Date().toISOString().substring(0, 7); // e.g. "2026-06"
-  const currentMonthBons = transactions.filter(t => t.tanggal.startsWith(currentMonthYear));
+  const currentMonthBons = activeTx.filter(t => t.tanggal.startsWith(currentMonthYear));
 
-  const totalPiutang = transactions
+  const totalPiutang = activeTx
     .filter(t => t.status === 'Open')
     .reduce((sum, t) => sum + t.omzet + t.ongkir, 0);
 

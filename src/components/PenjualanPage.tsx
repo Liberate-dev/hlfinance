@@ -1,6 +1,7 @@
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Customer, Bon, BonLine } from '../store/useStore';
+import { activeTransactions } from '../lib/activeData';
 import { 
   Search, Plus, Receipt, 
   Trash2, Check, AlertTriangle, ArrowLeft,
@@ -167,8 +168,10 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   })(); // e.g. "2026-06"
+
+  const activeTx = useMemo(() => activeTransactions(transactions), [transactions]);
   
-  const filtered = transactions.filter(t => {
+  const filtered = activeTx.filter(t => {
     const q = searchQuery.toLowerCase();
     const cust = customers.find(c => c.id === t.customer_id);
     const custCode = cust ? cust.kode.toLowerCase() : '';
@@ -1512,10 +1515,10 @@ export default function PenjualanPage({ startInAddMode = false }: PenjualanPageP
         open={!!deleteTargetId}
         title="Hapus Transaksi?"
         tone="danger"
-        confirmLabel="Ya, Hapus Permanen"
+        confirmLabel="Ya, Hapus"
         onCancel={() => setDeleteTargetId(null)}
         onConfirm={confirmDelete}
-        description="Bon akan dihapus permanen dari database. Tindakan ini tidak dapat dibatalkan."
+        description="Bon akan disembunyikan dari daftar, laporan, dan perhitungan piutang. Data bisa dipulihkan lewat menu Admin."
       />
     </div>
   );

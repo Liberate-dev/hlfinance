@@ -84,6 +84,7 @@ const renderStatusBadge = (status: 'Open' | 'Lunas' | 'Cancelled' | string) => {
 };
 
 import { useStore } from '../store/useStore';
+import { activeTransactions } from '../lib/activeData';
 import { generateCustomerKode } from '../lib/customerCode';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { toast } from './ui/AppToast';
@@ -100,7 +101,7 @@ export default function PelangganPage() {
     setShowAddCustomer
   } = useStore();
   
-  const bons = transactions;
+  const bons = activeTransactions(transactions);
 
   const notifyError = (msg: string) => toast(msg, 'error');
   const showSuccess = (msg: string) => toast(msg);
@@ -224,7 +225,9 @@ export default function PelangganPage() {
   const monthPrefix = selectedMonth.toString().padStart(2, '0');
   const selectedYearMonth = `${yearPrefix}-${monthPrefix}`;
 
-  const currentMonthBons = activeCustomer ? bons.filter(b => b.tanggal.startsWith(selectedYearMonth)) : [];
+  const currentMonthBons = activeCustomer
+    ? bons.filter(b => b.customer_id === activeCustomer.id && b.tanggal.startsWith(selectedYearMonth))
+    : [];
   const totalBonsCount = currentMonthBons.length;
   const totalPages = Math.ceil(totalBonsCount / itemsPerPage);
   

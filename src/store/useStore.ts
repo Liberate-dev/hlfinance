@@ -56,6 +56,7 @@ export interface Bon {
   is_bonus?: boolean;
   bonus_count?: number;
   lines: BonLine[];
+  deleted_at?: string | null;
 }
 
 interface StoreState {
@@ -76,6 +77,9 @@ interface StoreState {
   addProduct: (product: Omit<Produk, 'id'>) => Promise<string | null>;
   updateProduct: (product: Produk) => Promise<string | null>;
   deleteProduct: (id: string) => Promise<string | null>;
+  restoreCustomer: (id: string) => Promise<string | null>;
+  restoreProduct: (id: string) => Promise<string | null>;
+  restoreTransaction: (id: string) => Promise<string | null>;
 
   addTransaction: (transaction: Bon) => Promise<string | null>;
   updateTransaction: (transaction: Bon) => Promise<string | null>;
@@ -152,6 +156,24 @@ export const useStore = create<StoreState>((set, get) => ({
 
   deleteProduct: async (id) => {
     const { error } = await api.softDeleteProduct(id);
+    if (error) return error;
+    return get().refreshAfterMutation();
+  },
+
+  restoreCustomer: async (id) => {
+    const { error } = await api.restoreCustomer(id);
+    if (error) return error;
+    return get().refreshAfterMutation();
+  },
+
+  restoreProduct: async (id) => {
+    const { error } = await api.restoreProduct(id);
+    if (error) return error;
+    return get().refreshAfterMutation();
+  },
+
+  restoreTransaction: async (id) => {
+    const { error } = await api.restoreTransaction(id);
     if (error) return error;
     return get().refreshAfterMutation();
   },
